@@ -1,0 +1,389 @@
+// CSMJU Branch Finance Transparency System - OWN database schema.
+//
+// Naming follows the CSMJU2030 Subsystem Standard (data-dictionary.md 9): tables
+// are plural snake_case, every column is snake_case through @map, Prisma and
+// TypeScript names stay camelCase.
+//
+// This database belongs to the subsystem only. It never holds Core Hub users,
+// passwords, sessions or key material (reference-data.md 8):
+//   - a person is `core_user_id` (the token's `sub`: TEXT, <= 64, NOT a UUID)
+//     plus, where it is worth showing, `person_code` read from Core Hub's
+//     GET /people/me when the row was written - never a name or an email;
+//   - the Core Hub role (student, lecturer, admin) is read from the token on every
+//     request, never stored;
+//   - the only "role" kept here is a LAYER 2 fact the subsystem owns: which office
+//     (treasurer of a cohort, branch head) a student holds - see OfficerAssignment;
+//   - bills are Core Hub images: only the image `id` is kept (reference-data.md 6).
+//
+// Money is an INTEGER number of satang (data-dictionary.md 5, rule DD-05) - never
+// a float and never a decimal. 1 baht = 100 satang.
+//
+// DO NOT run `prisma db push` or `prisma migrate dev` on this project: several
+// constraints (partial unique indexes, CHECKs, append-only triggers) exist only
+// in the hand-written migrations, and `migrate dev` would turn a rename into
+// drop + add. Add migrations by hand and run `prisma migrate deploy`.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
+}
+
+// The connection string is supplied by prisma.config.ts (CLI) and by the
+// PrismaPg adapter in PrismaService (runtime) - always this subsystem's own
+// DATABASE_URL, never the Core Hub database.
+datasource db {
+  provider = "postgresql"
+}
+
+// ----------------------------------------------------------------------------
+// Enums
+// ----------------------------------------------------------------------------
+
+/// Layer 2 offices this subsystem owns: roles a `student` holds inside THIS system.
+/// Not Core Hub roles (data-dictionary.md 10).
+enum OfficerRole {
+  TREASURER
+  BRANCH_HEAD
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  ADJUSTMENT
+}
+
+/// EXPENSE: PENDING -> APPROVED | REJECTED | CANCELLED, APPROVED -> VOIDED.
+/// INCOME:  NEEDS_REVIEW -> APPROVED (confirm) | REJECTED, APPROVED -> VOIDED.
+enum TransactionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  VOIDED
+  NEEDS_REVIEW
+  CANCELLED
+}
+
+enum TransactionSourceType {
+  MANUAL // entered by hand through the web form
+  BANK_IMPORT // reserved for the automated bank-feed pipeline (not built)
+  ADJUSTMENT // corrective entry (flow not built)
+  LINE_REPORT // legacy value of the removed LINE OA quick entry - kept so old rows still load
+}
+
+enum ApprovalDecision {
+  APPROVE
+  REJECT
+  VOID
+}
+
+enum IntegrationEventStatus {
+  RECEIVED
+  PARSED
+  VALIDATED
+  DUPLICATE
+  NEEDS_REVIEW
+  ERROR
+  PROCESSED
+}
+
+// ----------------------------------------------------------------------------
+// Offices (Layer 2 roles)
+// ----------------------------------------------------------------------------
+
+/// Who holds an office, keyed by Core Hub `core_user_id`. Treasurer and branch head are
+/// students who hold a role only this subsystem knows about - Layer 2 data the subsystem
+/// is allowed to own (data-dictionary.md 10). The Core Hub role itself (student) is read
+/// from the token on every request and never stored here.
+///
+/// History, not a flag: closing a row (`active_to`) and opening another keeps the audit
+/// trail meaningful when an officer changes.
+///
+/// TREASURER rows carry a year account (one active treasurer per cohort, enforced by a
+/// partial unique index in the migration); the same treasurer follows the cohort through
+/// all four years. BRANCH_HEAD rows have no year account: the branch head is branch-wide.
+///
+/// When Core Hub can carry per-person subsystem roles in the token
+/// (subsystem-registry.md 7) this table can be retired.
+model OfficerAssignment {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  /// Core Hub `sub` of the officer. TEXT, not a UUID; not unique (history).
+  coreUserId String  @map("core_user_id")
+  /// Student code, so lists can show who this is without a name.
+  personCode String? @map("person_code")
+
+  officerRole OfficerRole @map("officer_role")
+  /// Required for TREASURER, null for BRANCH_HEAD (CHECK in the migration).
+  yearAccountId String? @map("year_account_id") @db.Uuid
+
+  activeFrom DateTime  @default(now()) @map("active_from") @db.Timestamptz(6)
+  /// null = currently active.
+  activeTo   DateTime? @map("active_to") @db.Timestamptz(6)
+
+  /// Core Hub `sub` of whoever appointed them.
+  grantedByCoreUserId String? @map("granted_by_core_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  yearAccount YearAccount? @relation(fields: [yearAccountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([coreUserId, activeTo])
+  @@index([yearAccountId, officerRole])
+  @@map("officer_assignments")
+}
+
+// ----------------------------------------------------------------------------
+// Year accounts (cohorts)
+// ----------------------------------------------------------------------------
+
+/// A cohort: it advances through year levels together and keeps the same
+/// treasurer for all four years. `year_level` is unique only among ACTIVE
+/// accounts (partial unique index in the migration, which Prisma cannot express).
+model YearAccount {
+  id        String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  yearLevel Int    @map("year_level")
+
+  name String
+
+  /// Academic year this cohort ENTERED as year 1, e.g. "2569". Never changes.
+  entryAcademicYearLabel String? @map("entry_academic_year_label")
+
+  /// Set once when the cohort is created; any later change goes through an
+  /// ADJUSTMENT transaction + audit log, never a direct UPDATE. Satang.
+  openingBalanceSatang Int @default(0) @map("opening_balance_satang")
+
+  currency String  @default("THB")
+  /// false = the cohort graduated and is archived (history is kept).
+  active   Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  officerAssignments OfficerAssignment[]
+  transactions       Transaction[]
+  integrationSources IntegrationSource[]
+  auditLogs          AuditLog[]
+  yearLevelPeriods   YearLevelPeriod[]
+
+  @@map("year_accounts")
+}
+
+/// One row per cohort per academic year: which level it held and its closing
+/// balance, so promoting `year_level` in place never destroys history.
+model YearLevelPeriod {
+  id            String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  yearAccountId String @map("year_account_id") @db.Uuid
+  academicYear  String @map("academic_year")
+  yearLevel     Int    @map("year_level")
+
+  startedAt DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  /// null = the cohort's current period.
+  endedAt   DateTime? @map("ended_at") @db.Timestamptz(6)
+
+  /// Snapshot taken when the period ends. Satang. The live balance is always
+  /// derived from transactions.
+  closingBalanceSatang Int? @map("closing_balance_satang")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  yearAccount YearAccount @relation(fields: [yearAccountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([yearAccountId, academicYear], map: "year_level_periods_year_account_id_academic_year_key")
+  @@index([yearAccountId, endedAt])
+  @@map("year_level_periods")
+}
+
+// ----------------------------------------------------------------------------
+// Transactions
+// ----------------------------------------------------------------------------
+
+model Transaction {
+  id            String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  yearAccountId String            @map("year_account_id") @db.Uuid
+  type          TransactionType
+  status        TransactionStatus @default(PENDING)
+
+  /// Integer satang, always > 0 (CHECK in the migration). The sign comes from `type`.
+  amountSatang Int @map("amount_satang")
+
+  transactionDate DateTime @map("transaction_date") @db.Date
+  description     String
+  category        String?
+
+  sourceType TransactionSourceType @map("source_type")
+
+  /// Human-traceable external reference (e.g. a bank reference). Not a dedup key.
+  externalReference String? @map("external_reference")
+
+  /// Deterministic key for the future bank-feed pipeline (dedup at DB level).
+  idempotencyKey String? @unique @map("idempotency_key")
+
+  /// Core Hub `sub` of whoever filed it / approved it. TEXT, never a UUID FK.
+  createdByCoreUserId  String    @map("created_by_core_user_id")
+  createdByPersonCode  String?   @map("created_by_person_code")
+  approvedByCoreUserId String?   @map("approved_by_core_user_id")
+  approvedByPersonCode String?   @map("approved_by_person_code")
+  approvedAt           DateTime? @map("approved_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  yearAccount       YearAccount        @relation(fields: [yearAccountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  evidence          ExpenseEvidence[]
+  approvalActions   ApprovalAction[]
+  integrationEvents IntegrationEvent[]
+
+  @@index([yearAccountId, transactionDate])
+  @@index([yearAccountId, status])
+  @@index([externalReference])
+  @@index([createdByCoreUserId])
+  @@map("transactions")
+}
+
+// ----------------------------------------------------------------------------
+// Evidence (bills)
+// ----------------------------------------------------------------------------
+
+/// A bill: either a Core Hub image or - for PDF - the file itself in this database.
+///
+/// Images (JPEG / PNG / WebP) go to Core Hub's POST /images and only the image `id` is
+/// kept (reference-data.md 6). Core Hub's image service does not take PDF, so a PDF is
+/// stored here as bytes (`file_data`), served only through this subsystem's own
+/// authenticated endpoint. That PDF path is a TEMPORARY, approved deviation from
+/// deployment.md 3.4 / reference-data.md 6 until the standard allows PDF; see REPORT.md.
+/// Exactly one of `image_id` / `file_data` is set (CHECK in the migration).
+///
+/// Every upload is a new immutable row; `version` increments and `is_current` marks the
+/// one to show, so replacing a bill never erases history.
+model ExpenseEvidence {
+  id            String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  transactionId String @map("transaction_id") @db.Uuid
+
+  /// Core Hub image id (POST /api/v1/images -> data.id). Null for a PDF.
+  imageId  String? @map("image_id")
+  /// The PDF bytes. Null for a Core Hub image. Never selected by list queries.
+  fileData Bytes?  @map("file_data")
+  /// SHA-256 (hex) of the file as uploaded, so the same bill is recognisable later.
+  checksum String?
+
+  originalFilename String @map("original_filename")
+  /// application/pdf, or the type Core Hub stored (it re-encodes images to WebP).
+  mimeType         String @map("mime_type")
+  sizeBytes        Int    @map("size_bytes")
+
+  uploadedByCoreUserId String   @map("uploaded_by_core_user_id")
+  uploadedAt           DateTime @default(now()) @map("uploaded_at") @db.Timestamptz(6)
+
+  version   Int     @default(1)
+  isCurrent Boolean @default(true) @map("is_current")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([transactionId, isCurrent])
+  @@map("expense_evidence")
+}
+
+// ----------------------------------------------------------------------------
+// Approval decisions (append-only: a trigger in the migration rejects UPDATE/DELETE)
+// ----------------------------------------------------------------------------
+
+model ApprovalAction {
+  id            String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  transactionId String           @map("transaction_id") @db.Uuid
+  decision      ApprovalDecision
+  /// Required by the service when decision = REJECT or VOID.
+  reason        String?
+
+  actorCoreUserId String  @map("actor_core_user_id")
+  actorPersonCode String? @map("actor_person_code")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([transactionId])
+  @@map("approval_actions")
+}
+
+// ----------------------------------------------------------------------------
+// Income integration (future bank-feed pipeline - no code uses these yet)
+// ----------------------------------------------------------------------------
+
+model IntegrationSource {
+  id               String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  yearAccountId    String  @map("year_account_id") @db.Uuid
+  provider         String
+  channel          String?
+  externalSourceId String? @map("external_source_id")
+  active           Boolean @default(true)
+  /// Pointer to secret-managed config, never a raw secret.
+  configurationRef String? @map("configuration_ref")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  yearAccount YearAccount        @relation(fields: [yearAccountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  events      IntegrationEvent[]
+
+  @@map("integration_sources")
+}
+
+model IntegrationEvent {
+  id                     String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  integrationSourceId    String                 @map("integration_source_id") @db.Uuid
+  externalEventId        String                 @map("external_event_id")
+  receivedAt             DateTime               @default(now()) @map("received_at") @db.Timestamptz(6)
+  rawPayloadRef          String?                @map("raw_payload_ref")
+  parsedStatus           IntegrationEventStatus @default(RECEIVED) @map("parsed_status")
+  errorCode              String?                @map("error_code")
+  processingAttempts     Int                    @default(0) @map("processing_attempts")
+  processedTransactionId String?                @map("processed_transaction_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  source               IntegrationSource @relation(fields: [integrationSourceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  processedTransaction Transaction?      @relation(fields: [processedTransactionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([integrationSourceId, externalEventId], map: "integration_events_source_external_event_key")
+  @@map("integration_events")
+}
+
+// ----------------------------------------------------------------------------
+// Audit log (append-only: a trigger in the migration rejects UPDATE/DELETE)
+// ----------------------------------------------------------------------------
+
+model AuditLog {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  /// Core Hub `sub` of whoever acted; null for a system-originated event.
+  actorCoreUserId String? @map("actor_core_user_id")
+  actorPersonCode String? @map("actor_person_code")
+
+  action        String
+  targetType    String  @map("target_type")
+  targetId      String  @map("target_id") @db.Uuid
+  yearAccountId String? @map("year_account_id") @db.Uuid
+
+  beforeJson   Json? @map("before_json")
+  afterJson    Json? @map("after_json")
+  metadataJson Json? @map("metadata_json")
+
+  ipAddress String? @map("ip_address")
+  userAgent String? @map("user_agent")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  yearAccount YearAccount? @relation(fields: [yearAccountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([targetType, targetId, createdAt])
+  @@map("audit_logs")
+}
