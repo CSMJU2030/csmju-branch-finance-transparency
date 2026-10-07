@@ -48,10 +48,16 @@ export class ApprovalsService {
    * Oldest first - the longest-waiting request is the one to read next.
    */
   async listPending(user: CoreHubIdentity, academicYear?: number, token?: string): Promise<Transaction[]> {
-    await this.scope.assertMayDecide(user);
     const range = academicYear === undefined ? null : await this.referenceData.academicYearRange(token!, academicYear);
+    const branchHeadYearAccountIds = user.subsystemRole === 'ADMIN'
+      ? null
+      : await this.scope.branchHeadYearAccountIds(user.id);
+    if (user.subsystemRole !== 'ADMIN' && (branchHeadYearAccountIds?.length ?? 0) === 0) {
+      throw AppException.forbidden('Only the branch head responsible for a year can do this');
+    }
     return this.prisma.transaction.findMany({
       where: {
+        ...(branchHeadYearAccountIds ? { yearAccountId: { in: branchHeadYearAccountIds } } : {}),
         ...(range ? { transactionDate: { gte: new Date(range.startDate), lte: new Date(range.endDate) } } : {}),
         OR: [
           { status: TransactionStatus.PENDING, type: TransactionType.EXPENSE },
@@ -138,6 +144,8 @@ export class ApprovalsService {
           `Transaction is ${row.status}, not ${fromStatus} - cannot ${t.decision.toLowerCase()} it`,
         );
       }
+      // The branch head may decide only for the year account they were appointed to oversee.
+      await this.scope.assertMayDecide(t.user, row.yearAccountId);
       // Segregation of duties: nobody decides on their own entry.
       if (row.createdByCoreUserId === t.user.id) {
         throw AppException.forbidden('You cannot act on a transaction you filed yourself');

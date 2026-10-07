@@ -37,6 +37,13 @@ export class OfficersController {
     return this.officers.listAssignableStudents(user, token, { q, page: parsedPage, entryYear: parsedEntryYear });
   }
 
+  /** Available student first-admission years, derived directly from Core Hub people data. */
+  @Get('entry-years')
+  @RequirePermissions(Permission.OFFICER_MANAGE)
+  entryYears(@CoreHubAccessToken() token: string) {
+    return this.officers.listAssignableEntryYears(token);
+  }
+
   /** Cohort labels needed only by a caller authorized to manage offices. */
   @Get('year-accounts')
   @RequirePermissions(Permission.OFFICER_MANAGE)

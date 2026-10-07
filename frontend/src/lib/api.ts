@@ -57,7 +57,6 @@ export type BranchStudent = {
 };
 
 export type BranchStudentPage = {
-  departmentCode: string;
   items: BranchStudent[];
   meta: PageMeta;
 };
@@ -255,11 +254,11 @@ export const getAuditTrail = (id: string) => call<AuditLog[]>(`/api/v1/transacti
 export const listPending = (academicYear?: number) =>
   call<Transaction[]>(`/api/v1/approvals/pending${academicYear ? `?academicYear=${academicYear}` : ""}`);
 
-export function listAuditLogs(query: { page?: number; action?: string; targetType?: string; academicYear?: number }) {
+export function listAuditLogs(query: { page?: number; action?: string; targetType?: string; yearAccountId?: string }) {
   const params = new URLSearchParams({ page: String(query.page ?? 1), limit: "30" });
   if (query.action) params.set("action", query.action);
   if (query.targetType) params.set("targetType", query.targetType);
-  if (query.academicYear) params.set("academicYear", String(query.academicYear));
+  if (query.yearAccountId) params.set("yearAccountId", query.yearAccountId);
   return call<AuditLog[]>(`/api/v1/audit-logs?${params.toString()}`);
 }
 
@@ -272,6 +271,10 @@ export const getCurrentAcademicTerm = cache(() =>
 
 export const getRecentAcademicYears = cache(() =>
   call<number[]>("/api/v1/core-hub/academic-years"),
+);
+
+export const getAssignableEntryYears = cache(() =>
+  call<number[]>("/api/v1/officer-assignments/entry-years"),
 );
 
 /** Personal directory results are always requested with no-store and never memoized. */

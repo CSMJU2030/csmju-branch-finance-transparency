@@ -198,7 +198,7 @@ export async function grantOfficer(formData: FormData) {
     body: {
       coreUserId: text(formData, "coreUserId"),
       officerRole,
-      ...(officerRole === "TREASURER" && yearAccountId ? { yearAccountId } : {}),
+      ...(yearAccountId ? { yearAccountId } : {}),
       ...(personCode ? { personCode } : {}),
     },
   });

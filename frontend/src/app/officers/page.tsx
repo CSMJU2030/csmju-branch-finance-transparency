@@ -9,6 +9,7 @@ import { gate } from "@/lib/gate";
 import { OFFICER_LABEL } from "@/lib/labels";
 import StudentPicker from "@/components/StudentPicker";
 import AcademicYearFilter from "@/components/AcademicYearFilter";
+import OfficerAssignmentFields from "@/components/OfficerAssignmentFields";
 import { grantOfficer, revokeOfficer } from "../actions";
 
 const SUPPORTED_ENTRY_YEARS = [2569, 2568, 2567, 2566];
@@ -53,7 +54,7 @@ export default async function OfficersPage({
     <div className="flex flex-col gap-6 p-6 md:p-10">
       <PageHeader
         title="แต่งตั้งเจ้าหน้าที่"
-        description="เลือกนักศึกษาจากรายชื่อปัจจุบันของ Core Hub เพื่อแต่งตั้งเหรัญญิกประจำชั้นปีหรือหัวหน้าสาขา"
+        description="เลือกนักศึกษาจากรายชื่อปัจจุบันของ Core Hub เพื่อแต่งตั้งเหรัญญิกหรือหัวหน้าสาขาประจำชั้นปี"
       />
       <Flash ok={ok} error={error} />
 
@@ -94,14 +95,13 @@ export default async function OfficersPage({
           ตำแหน่ง
           <select name="officerRole" required className={inputClass} defaultValue="TREASURER">
             <option value="TREASURER">{OFFICER_LABEL.TREASURER} (ประจำชั้นปี)</option>
-            {/* branch heads can appoint treasurers only; admins and staff may manage both roles */}
-            {caps.canManageAllOffices && <option value="BRANCH_HEAD">{OFFICER_LABEL.BRANCH_HEAD}</option>}
+            {caps.canManageAllOffices && <option value="BRANCH_HEAD">{OFFICER_LABEL.BRANCH_HEAD} (ประจำชั้นปี)</option>}
           </select>
         </label>
         <label className="flex flex-col gap-1 text-label-md">
-          ชั้นปีที่แต่งตั้งเหรัญญิก
-          <select name="yearAccountId" className={inputClass} defaultValue={assignableYearAccounts[0]?.id ?? ""}>
-            <option value="">เลือกชั้นปีที่รับผิดชอบ</option>
+          ชั้นปีที่แต่งตั้งให้ดูแล
+          <select name="yearAccountId" required className={inputClass} defaultValue={assignableYearAccounts[0]?.id ?? ""}>
+            <option value="">เลือกชั้นปีที่ดูแล</option>
             {assignableYearAccounts.map((year) => (
               <option key={year.id} value={year.id}>
                 ชั้นปีที่ {year.yearLevel} · รุ่นปีแรกเข้า พ.ศ. {year.entryAcademicYearLabel ?? "—"}
