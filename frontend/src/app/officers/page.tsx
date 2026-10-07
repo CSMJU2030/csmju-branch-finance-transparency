@@ -3,13 +3,15 @@ import { redirect } from "next/navigation";
 import { PageHeader, cardClass, dangerButtonClass, inputClass, primaryButtonClass, tdClass, thClass } from "@/csmju";
 import Flash from "@/components/Flash";
 import ReSignIn from "@/components/ReSignIn";
-import { getRecentAcademicYears, isUnauthorized, listAssignableStudents, listAssignableYearAccounts, listOfficers } from "@/lib/api";
+import { isUnauthorized, listAssignableStudents, listAssignableYearAccounts, listOfficers } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { gate } from "@/lib/gate";
 import { OFFICER_LABEL } from "@/lib/labels";
 import StudentPicker from "@/components/StudentPicker";
 import AcademicYearFilter from "@/components/AcademicYearFilter";
 import { grantOfficer, revokeOfficer } from "../actions";
+
+const SUPPORTED_ENTRY_YEARS = [2569, 2568, 2567, 2566];
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "แต่งตั้งเจ้าหน้าที่" };
@@ -22,30 +24,30 @@ export const metadata = { title: "แต่งตั้งเจ้าหน้�
 export default async function OfficersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; error?: string; q?: string; page?: string; academicYear?: string }>;
+  searchParams: Promise<{ ok?: string; error?: string; q?: string; page?: string; entryYear?: string }>;
 }) {
-  const { ok, error, q = "", page: pageValue, academicYear } = await searchParams;
+  const { ok, error, q = "", page: pageValue, entryYear } = await searchParams;
   const page = Number(pageValue) > 0 ? Number(pageValue) : 1;
   const session = await gate();
   if ("view" in session) return session.view;
   const { caps } = session;
   if (!caps.canManageOffices) redirect("/");
 
-  const [assignments, years, academicYears] = await Promise.all([
+  const [assignments, years] = await Promise.all([
     listOfficers(),
     listAssignableYearAccounts(),
-    getRecentAcademicYears(),
   ]);
-  if (isUnauthorized(assignments, years, academicYears)) return <ReSignIn />;
-  const selectedYear = academicYears.ok
-    ? (academicYears.data.includes(Number(academicYear)) ? Number(academicYear) : academicYears.data[0])
-    : undefined;
-  const students = await listAssignableStudents({ q, page, entryYear: selectedYear });
+  if (isUnauthorized(assignments, years)) return <ReSignIn />;
+  const requestedEntryYear = Number(entryYear);
+  const selectedEntryYear = SUPPORTED_ENTRY_YEARS.includes(requestedEntryYear)
+    ? requestedEntryYear
+    : SUPPORTED_ENTRY_YEARS[0];
+  const students = await listAssignableStudents({ q, page, entryYear: selectedEntryYear });
   if (isUnauthorized(students)) return <ReSignIn />;
   const yearNames = Object.fromEntries((years.ok ? years.data : []).map((year) => [year.id, `ชั้นปีที่ ${year.yearLevel}`]));
-  const matchingYearAccounts = years.ok
-    ? years.data.filter((year) => year.entryAcademicYearLabel === String(selectedYear))
-    : [];
+  // Entry year is only the Core Hub student-directory filter. A treasurer is
+  // appointed to the active cohort/account, so do not couple the two values.
+  const assignableYearAccounts = years.ok ? years.data : [];
 
   return (
     <div className="flex flex-col gap-6 p-6 md:p-10">
@@ -57,12 +59,12 @@ export default async function OfficersPage({
 
       <section className={`${cardClass} flex flex-col gap-3 p-4`}>
         <div>
-          <h2 className="text-label-md text-on-surface">เลือกปีการศึกษาที่เข้าศึกษา</h2>
+          <h2 className="text-label-md text-on-surface">เลือกปีแรกเข้า</h2>
           <p className="text-caption text-on-surface-variant">
-            คัดรายชื่อตามปีการศึกษาแรกเข้า พ.ศ. {selectedYear ?? "—"} · แสดงตามสิทธิ์ Core Hub · สาขา {students.ok ? students.data.departmentCode : "ตามบัญชีผู้เรียก"}
+            คัดรายชื่อตามปีการศึกษาแรกเข้าของนักศึกษาจาก Core Hub พ.ศ. {selectedEntryYear ?? "—"}
           </p>
         </div>
-        <AcademicYearFilter years={academicYears.ok ? academicYears.data : []} selectedYear={selectedYear} />
+        <AcademicYearFilter years={SUPPORTED_ENTRY_YEARS} selectedYear={selectedEntryYear} />
         {!students.ok && (
           <p role="alert" className="text-body-md text-error">
             โหลดรายชื่อนักศึกษาไม่สำเร็จ: {students.message}
@@ -73,8 +75,8 @@ export default async function OfficersPage({
             พบ {students.data.meta.total} คน · หน้า {students.data.meta.page}/{Math.max(1, students.data.meta.totalPages)}
             {students.data.meta.totalPages > 1 && (
               <span className="ml-3 inline-flex gap-3">
-                {page > 1 && <Link className="text-primary-container hover:underline" href={`/officers?${new URLSearchParams({ q, page: String(page - 1), academicYear: String(selectedYear ?? "") })}`}>ก่อนหน้า</Link>}
-                {page < students.data.meta.totalPages && <Link className="text-primary-container hover:underline" href={`/officers?${new URLSearchParams({ q, page: String(page + 1), academicYear: String(selectedYear ?? "") })}`}>ถัดไป</Link>}
+                {page > 1 && <Link className="text-primary-container hover:underline" href={`/officers?${new URLSearchParams({ q, page: String(page - 1), entryYear: String(selectedEntryYear ?? "") })}`}>ก่อนหน้า</Link>}
+                {page < students.data.meta.totalPages && <Link className="text-primary-container hover:underline" href={`/officers?${new URLSearchParams({ q, page: String(page + 1), entryYear: String(selectedEntryYear ?? "") })}`}>ถัดไป</Link>}
               </span>
             )}
           </p>
@@ -98,20 +100,20 @@ export default async function OfficersPage({
         </label>
         <label className="flex flex-col gap-1 text-label-md">
           ชั้นปีที่แต่งตั้งเหรัญญิก
-          <select name="yearAccountId" className={inputClass} defaultValue={matchingYearAccounts[0]?.id ?? ""}>
-            <option value="">เลือกปีการศึกษาแรกเข้า</option>
-            {matchingYearAccounts.map((year) => (
+          <select name="yearAccountId" className={inputClass} defaultValue={assignableYearAccounts[0]?.id ?? ""}>
+            <option value="">เลือกชั้นปีที่รับผิดชอบ</option>
+            {assignableYearAccounts.map((year) => (
               <option key={year.id} value={year.id}>
-                ชั้นปีที่ {year.yearLevel} · ปีการศึกษาแรกเข้า พ.ศ. {year.entryAcademicYearLabel}
+                ชั้นปีที่ {year.yearLevel} · รุ่นปีแรกเข้า พ.ศ. {year.entryAcademicYearLabel ?? "—"}
               </option>
             ))}
           </select>
-          {!matchingYearAccounts.length && (
-            <span className="text-caption text-error">ยังไม่มีบัญชีชั้นปีที่ผูกกับปีการศึกษาแรกเข้านี้ จึงแต่งตั้งเหรัญญิกไม่ได้</span>
+          {!assignableYearAccounts.length && (
+            <span className="text-caption text-error">ยังไม่มีบัญชีชั้นปีที่ใช้งานอยู่ กรุณาสร้างบัญชีชั้นปีก่อนแต่งตั้งเหรัญญิก</span>
           )}
         </label>
         {students.ok && (
-          <StudentPicker students={students.data.items} academicYear={selectedYear} initialQuery={q} />
+          <StudentPicker students={students.data.items} entryYear={selectedEntryYear} initialQuery={q} />
         )}
         {(!students.ok || !students.data.items.some((student) => student.coreUserId)) && (
           <>
