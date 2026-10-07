@@ -4,6 +4,7 @@ import { AuditService } from '../audit/audit.service';
 import { CoreHubIdentity, SubsystemRole } from '../auth/core-hub-identity';
 import { AppException } from '../common/errors';
 import { PeopleService } from '../core-hub/people.service';
+import { ReferenceDataService } from '../core-hub/reference-data.service';
 import { OfficerScopeService } from '../officers/officer-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { lockTransaction } from '../shared/transaction-lock';
@@ -35,6 +36,7 @@ export class TransactionsService {
     private readonly scope: OfficerScopeService,
     private readonly audit: AuditService,
     private readonly people: PeopleService,
+    private readonly referenceData: ReferenceDataService,
   ) {}
 
   /** A treasurer files an expense for their own cohort; it starts PENDING. */
@@ -59,6 +61,16 @@ export class TransactionsService {
     if (!year || !year.active) {
       throw AppException.notFound('Year account not found');
     }
+    const [range, period] = await Promise.all([
+      this.referenceData.academicYearRange(token, dto.academicYear),
+      this.prisma.yearLevelPeriod.findUnique({
+        where: { yearAccountId_academicYear: { yearAccountId: dto.yearAccountId, academicYear: String(dto.academicYear) } },
+      }),
+    ]);
+    const transactionDate = new Date(dto.transactionDate);
+    if (!period || dto.transactionDate < range.startDate || dto.transactionDate > range.endDate) {
+      throw AppException.badRequest('The transaction date must fall within the selected academic year and assigned cohort period');
+    }
 
     // Personal data is never cached: asked now, with the filer's own token.
     const personCode = await this.people.myPersonCode(token);
@@ -70,7 +82,7 @@ export class TransactionsService {
           type,
           status: undecidedStatus(type),
           amountSatang: dto.amountSatang,
-          transactionDate: new Date(dto.transactionDate),
+          transactionDate,
           description: dto.description,
           category: dto.category,
           sourceType: 'MANUAL',
@@ -95,9 +107,11 @@ export class TransactionsService {
   }
 
   /** Branch-wide read: transparency is the point, so every signed-in role sees every cohort. */
-  async list(user: CoreHubIdentity, query: QueryTransactionsDto): Promise<{ items: Transaction[]; total: number }> {
+  async list(user: CoreHubIdentity, query: QueryTransactionsDto, token: string): Promise<{ items: Transaction[]; total: number }> {
+    const range = query.academicYear ? await this.referenceData.academicYearRange(token, query.academicYear) : null;
     const where: Prisma.TransactionWhereInput = {
       yearAccountId: query.yearAccountId,
+      ...(range ? { transactionDate: { gte: new Date(range.startDate), lte: new Date(range.endDate) } } : {}),
       type: query.type,
       status: query.status,
       ...(query.mine ? { createdByCoreUserId: user.id } : {}),

@@ -38,8 +38,26 @@ describe('permission matrix (authorization.md 4, 6)', () => {
     }
   });
 
-  it('staff and alumni (not accepted by the mapping) hold nothing', () => {
-    expect(ROLE_PERMISSIONS[SubsystemRole.STAFF]).toHaveLength(0);
+  it('staff can read financial data and logs, manage office assignments, and close the year, but cannot decide transactions', () => {
+    expect(can(SubsystemRole.STAFF, Permission.AUDIT_READ)).toBe(true);
+    expect(can(SubsystemRole.STAFF, Permission.OFFICER_READ_ANY)).toBe(true);
+    expect(can(SubsystemRole.STAFF, Permission.OFFICER_MANAGE)).toBe(true);
+    expect(can(SubsystemRole.STAFF, Permission.TRANSACTION_READ)).toBe(true);
+    expect(can(SubsystemRole.STAFF, Permission.EVIDENCE_READ)).toBe(true);
+    expect(can(SubsystemRole.STAFF, Permission.YEAR_ACCOUNT_READ)).toBe(true);
+    expect(can(SubsystemRole.STAFF, Permission.YEAR_ACCOUNT_ADVANCE)).toBe(true);
+    for (const permission of [
+      ...FILING_PERMISSIONS,
+      Permission.APPROVAL_READ,
+      Permission.TRANSACTION_APPROVE,
+      Permission.TRANSACTION_REJECT,
+      Permission.TRANSACTION_VOID,
+    ]) {
+      expect(can(SubsystemRole.STAFF, permission)).toBe(false);
+    }
+  });
+
+  it('alumni hold no permissions', () => {
     expect(ROLE_PERMISSIONS[SubsystemRole.ALUMNI]).toHaveLength(0);
   });
 

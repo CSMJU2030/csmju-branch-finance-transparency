@@ -63,6 +63,7 @@ services:
       CORE_HUB_WEB_URL: ${CORE_HUB_WEB_URL:-https://csmju2030.jowave.com}
       CORE_HUB_ISSUER: ${CORE_HUB_ISSUER:-core-hub}
       CORE_HUB_AUDIENCE: ${CORE_HUB_AUDIENCE:-csmju2030}
+      CORE_HUB_DEPARTMENT_CODE: ${CORE_HUB_DEPARTMENT_CODE:-}
       SUBSYSTEM_ID: ${SUBSYSTEM_ID:-csmju-branch-finance-transparency}
       SUBSYSTEM_NAME: ${SUBSYSTEM_NAME:-CSMJU Branch Finance Transparency}
       TZ: Asia/Bangkok

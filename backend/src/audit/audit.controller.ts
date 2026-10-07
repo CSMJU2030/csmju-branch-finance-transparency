@@ -9,7 +9,7 @@ import { OfficerScopeService } from '../officers/officer-scope.service';
 import { AuditService } from './audit.service';
 import { ListAuditLogsQueryDto } from './dto/list-audit-logs-query.dto';
 
-/** The audit trail is for the deciders (branch head, admin): permission at role level, office in the service. */
+/** Audit access is controlled by the AUDIT_READ role permission. */
 @Controller('v1')
 export class AuditController {
   constructor(
@@ -20,7 +20,7 @@ export class AuditController {
   @Get('audit-logs')
   @RequirePermissions(Permission.AUDIT_READ)
   async list(@CurrentUser() user: CoreHubIdentity, @Query() query: ListAuditLogsQueryDto) {
-    await this.scope.assertMayDecide(user);
+    await this.scope.assertMayReadAudit(user);
     const { items, total } = await this.audit.list(query);
     return new CollectionResult(items, buildPaginationMeta(total, query.page ?? 1, query.take));
   }
@@ -31,7 +31,7 @@ export class AuditController {
     @CurrentUser() user: CoreHubIdentity,
     @Param('transactionId', ParseUUIDPipe) transactionId: string,
   ) {
-    await this.scope.assertMayDecide(user);
+    await this.scope.assertMayReadAudit(user);
     return this.audit.listForTarget('Transaction', transactionId);
   }
 }

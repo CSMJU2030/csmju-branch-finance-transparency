@@ -10,7 +10,8 @@ import { SubsystemRole } from './core-hub-identity';
  *                                  or decide - the office is checked in the service.
  *   lecturer           LECTURER    reads the books, never files or decides
  *   admin              ADMIN       decides, and appoints officers
- *   staff, alumni, guest  -- not listed: no access --
+ *   staff              STAFF       reads financial data/logs, manages Layer 2, closes the year
+ *   alumni, guest        -- not listed: no access --
  *
  * This table MUST equal `default_role_mapping` declared for this subsystem in the Core
  * Hub Subsystem Registry (reviewers compare them by eye). A core role that is not a key
@@ -24,6 +25,7 @@ import { SubsystemRole } from './core-hub-identity';
 export const CORE_ROLE_TO_SUBSYSTEM_ROLE: Readonly<Record<string, SubsystemRole>> = Object.freeze({
   student: SubsystemRole.STUDENT,
   lecturer: SubsystemRole.LECTURER,
+  staff: SubsystemRole.STAFF,
   admin: SubsystemRole.ADMIN,
 });
 

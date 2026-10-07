@@ -14,6 +14,8 @@ export interface AppConfig {
     jwksUrl: string;
     issuer: string;
     audience: string;
+    /** Branch scope for directory lookup when the signed-in person's Core Hub profile has no department. */
+    departmentCode: string | null;
     jwksCacheTtlMs: number;
     jwksMinRefreshIntervalMs: number;
     jwksRequestTimeoutMs: number;
@@ -47,6 +49,7 @@ export default (): AppConfig => {
         `${coreHubUrl.replace(/\/+$/, '')}/api/v1/.well-known/jwks.json`,
       issuer: process.env.CORE_HUB_ISSUER ?? 'core-hub',
       audience: process.env.CORE_HUB_AUDIENCE ?? 'csmju2030',
+      departmentCode: process.env.CORE_HUB_DEPARTMENT_CODE?.trim() || null,
       jwksCacheTtlMs: num(process.env.JWKS_CACHE_TTL_MS, 10 * 60 * 1000),
       jwksMinRefreshIntervalMs: num(process.env.JWKS_MIN_REFRESH_INTERVAL_MS, 30 * 1000),
       jwksRequestTimeoutMs: num(process.env.JWKS_REQUEST_TIMEOUT_MS, 5000),

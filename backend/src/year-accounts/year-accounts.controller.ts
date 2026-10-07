@@ -4,6 +4,7 @@ import { CoreHubAccessToken } from '../auth/decorators/core-hub-access-token.dec
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { Permission } from '../auth/permissions';
+import { AppException } from '../common/errors';
 import { AdvanceAcademicYearDto } from './dto/advance-academic-year.dto';
 import { QueryYearAccountsDto } from './dto/query-year-accounts.dto';
 import { YearAccountsService } from './year-accounts.service';
@@ -20,8 +21,16 @@ export class YearAccountsController {
 
   @Get(':id/summary')
   @RequirePermissions(Permission.YEAR_ACCOUNT_READ)
-  summary(@Param('id', ParseUUIDPipe) id: string) {
-    return this.yearAccounts.getSummary(id);
+  summary(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('academicYear') academicYear: string | undefined,
+    @CoreHubAccessToken() token: string,
+  ) {
+    const year = academicYear === undefined ? undefined : Number(academicYear);
+    if (year !== undefined && (!Number.isInteger(year) || year < 2500 || year > 3000)) {
+      throw AppException.badRequest('academicYear must be a valid Buddhist calendar year');
+    }
+    return this.yearAccounts.getSummary(id, year, token);
   }
 
   /** Once-a-year and hard to undo: the caller names the academic year explicitly. */

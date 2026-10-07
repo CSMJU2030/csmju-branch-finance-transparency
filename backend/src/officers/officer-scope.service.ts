@@ -40,7 +40,8 @@ export class OfficerScopeService {
       where: { coreUserId, officerRole: OfficerRole.TREASURER, activeTo: null },
       select: { yearAccountId: true },
     });
-    return rows.flatMap((row) => (row.yearAccountId ? [row.yearAccountId] : []));
+    const ids = rows.flatMap((row) => (row.yearAccountId ? [row.yearAccountId] : []));
+    return ids;
   }
 
   async assertTreasurerOf(user: CoreHubIdentity, yearAccountId: string): Promise<void> {
@@ -52,13 +53,33 @@ export class OfficerScopeService {
     }
   }
 
-  /** Deciding on money (approve, reject, void, audit, advance the year): the branch head or an admin. */
+  /** Deciding on money (approve, reject, void, advance the year): the branch head or an admin. */
   async assertMayDecide(user: CoreHubIdentity): Promise<void> {
     if (user.subsystemRole === SubsystemRole.ADMIN) {
       return;
     }
     if (!(await this.isBranchHead(user.id))) {
       throw AppException.forbidden('Only the branch head can do this');
+    }
+  }
+
+  /** Closing the academic year: staff, the branch head, or an admin. */
+  async assertMayAdvanceAcademicYear(user: CoreHubIdentity): Promise<void> {
+    if ([SubsystemRole.STAFF, SubsystemRole.ADMIN].includes(user.subsystemRole)) {
+      return;
+    }
+    if (!(await this.isBranchHead(user.id))) {
+      throw AppException.forbidden('Only staff, the branch head, or an admin can close the academic year');
+    }
+  }
+
+  /** Audit readers: staff, a branch head, or an admin. Staff cannot decide on money. */
+  async assertMayReadAudit(user: CoreHubIdentity): Promise<void> {
+    if ([SubsystemRole.STAFF, SubsystemRole.ADMIN].includes(user.subsystemRole)) {
+      return;
+    }
+    if (!(await this.isBranchHead(user.id))) {
+      throw AppException.forbidden('Only staff, the branch head, or an admin can read audit logs');
     }
   }
 }

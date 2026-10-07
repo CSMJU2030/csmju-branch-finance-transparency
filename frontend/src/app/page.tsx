@@ -2,7 +2,7 @@ import Link from "next/link";
 import { PageHeader, cardClass, inputClass, primaryButtonClass, StatusBadge } from "@/csmju";
 import Flash from "@/components/Flash";
 import ReSignIn from "@/components/ReSignIn";
-import { getYearSummary, isUnauthorized, listPending, listYearAccounts } from "@/lib/api";
+import { getRecentAcademicYears, getYearSummary, isUnauthorized, listPending, listYearAccounts } from "@/lib/api";
 import { gate } from "@/lib/gate";
 import { formatBaht } from "@/lib/money";
 import { advanceAcademicYear } from "./actions";
@@ -13,24 +13,36 @@ export const metadata = { title: "ภาพรวม" };
 export default async function OverviewPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; error?: string; archived?: string }>;
+  searchParams: Promise<{ ok?: string; error?: string; archived?: string; academicYear?: string }>;
 }) {
-  const { ok, error, archived } = await searchParams;
+  const { ok, error, archived, academicYear } = await searchParams;
   const session = await gate();
   if ("view" in session) return session.view;
   const { caps } = session;
-
-  const years = await listYearAccounts(archived === "1");
-  if (isUnauthorized(years)) return <ReSignIn />;
-
-  const summaries = years.ok ? await Promise.all(years.data.map((year) => getYearSummary(year.id))) : [];
-  const pending = caps.canDecide ? await listPending() : null;
+  const [years, academicYears] = await Promise.all([
+    listYearAccounts(archived === "1"),
+    getRecentAcademicYears(),
+  ]);
+  if (isUnauthorized(years, academicYears)) return <ReSignIn />;
+  const selectedYear = academicYears.ok
+    ? (academicYears.data.includes(Number(academicYear)) ? Number(academicYear) : academicYears.data[0])
+    : undefined;
+  const allSummaries = years.ok ? await Promise.all(years.data.map((year) => getYearSummary(year.id))) : [];
+  const visibleIds = new Set(allSummaries.flatMap((summary) =>
+    summary.ok && (selectedYear === undefined || summary.data.periods.some((period) => period.academicYear === String(selectedYear)))
+      ? [summary.data.yearAccountId]
+      : [],
+  ));
+  const summaries = years.ok
+    ? await Promise.all(years.data.filter((year) => visibleIds.has(year.id)).map((year) => getYearSummary(year.id, selectedYear)))
+    : [];
+  const pending = caps.canDecide ? await listPending(selectedYear) : null;
 
   return (
     <div className="flex flex-col gap-6 p-6 md:p-10">
       <PageHeader
         title="ภาพรวมการเงินของสาขา"
-        description="ยอดคงเหลือของแต่ละรุ่น คำนวณจากรายการที่อนุมัติแล้วเท่านั้น — ทุกคนที่เข้าระบบได้ดูได้เหมือนกัน"
+        description="ยอดคงเหลือของแต่ละชั้นปี คำนวณจากรายการที่อนุมัติแล้วเท่านั้น — ทุกคนที่เข้าระบบได้ดูได้เหมือนกัน"
       />
       <Flash ok={ok} error={error} />
 
@@ -52,8 +64,8 @@ export default async function OverviewPage({
             <section key={summary.data.yearAccountId} className={`${cardClass} flex flex-col gap-4 p-6`}>
               <header className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="font-display text-headline-md text-on-surface">{summary.data.name}</h2>
-                  <p className="text-caption text-on-surface-variant">ชั้นปี {summary.data.yearLevel}</p>
+                  <h2 className="font-display text-headline-md text-on-surface">ชั้นปีที่ {summary.data.yearLevel}</h2>
+                  <p className="text-caption text-on-surface-variant">ปีการศึกษา พ.ศ. {selectedYear ?? "ทั้งหมด"}</p>
                 </div>
                 {!summary.data.active && <StatusBadge tone="neutral" label="จบการศึกษาแล้ว" />}
               </header>
@@ -75,15 +87,15 @@ export default async function OverviewPage({
                 <dd className="text-right tabular-nums text-amber-800">{formatBaht(summary.data.pendingExpenseTotalSatang)}</dd>
               </dl>
               <Link
-                href={`/transactions?yearAccountId=${summary.data.yearAccountId}`}
+                href={`/transactions?academicYear=${selectedYear}&yearAccountId=${summary.data.yearAccountId}`}
                 className="text-label-md text-primary-container hover:underline"
               >
-                ดูรายการของรุ่นนี้
+                ดูรายการของชั้นปีนี้
               </Link>
             </section>
           ) : (
             <p key={summary.status + summary.message} className={`${cardClass} p-6 text-body-md text-on-surface-variant`}>
-              โหลดยอดของรุ่นหนึ่งไม่สำเร็จ
+              โหลดยอดของชั้นปีหนึ่งไม่สำเร็จ
             </p>
           ),
         )}
@@ -92,21 +104,21 @@ export default async function OverviewPage({
       <p className="text-body-md text-on-surface-variant">
         {archived === "1" ? (
           <Link href="/" className="text-primary-container hover:underline">
-            ซ่อนรุ่นที่จบการศึกษาแล้ว
+            ซ่อนชั้นปีที่จบการศึกษาแล้ว
           </Link>
         ) : (
           <Link href="/?archived=1" className="text-primary-container hover:underline">
-            แสดงรุ่นที่จบการศึกษาแล้ว (ประวัติยังเปิดดูได้)
+            แสดงชั้นปีที่จบการศึกษาแล้ว (ประวัติยังเปิดดูได้)
           </Link>
         )}
       </p>
 
-      {caps.canDecide && (
+      {caps.canCloseYear && (
         <details className={`${cardClass} p-6`}>
           <summary className="cursor-pointer text-label-md text-on-surface">ปิดปีการศึกษา (ทำปีละครั้ง)</summary>
           <form action={advanceAcademicYear} className="mt-4 flex flex-col gap-4">
             <p className="text-body-md text-on-surface-variant">
-              ทุกรุ่นเลื่อนขึ้นหนึ่งชั้นปี รุ่นปี 4 จบการศึกษา (เก็บประวัติไว้) และสร้างรุ่นปี 1 ใหม่ ย้อนกลับไม่ได้
+              ทุกชั้นปีเลื่อนขึ้นหนึ่งชั้นปี ชั้นปีที่ 4 จบการศึกษา (เก็บประวัติไว้) และสร้างชั้นปีที่ 1 ใหม่ ย้อนกลับไม่ได้
             </p>
             <label className="flex flex-col gap-1 text-label-md">
               ปีการศึกษาใหม่ (พ.ศ.)

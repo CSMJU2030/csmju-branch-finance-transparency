@@ -1,13 +1,25 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { AppException } from '../common/errors';
 import { CoreHubCallError, coreHubFailure, getFromCoreHub } from './core-hub-http';
 
+export type CoreHubStudentOption = {
+  personCode: string;
+  fullNameTh: string;
+  fullNameEn: string | null;
+  coreUserId: string | null;
+  entryYear: number | null;
+};
+
+export type CoreHubStudentPage = {
+  departmentCode: string;
+  items: CoreHubStudentOption[];
+  meta: { total: number; page: number; limit: number; totalPages: number };
+};
+
 /**
- * ข้อมูลบุคคลจาก Core Hub (reference-data.md ข้อ 5) — ไม่ใช่ข้อมูลอ้างอิง
- *
- * - **ห้าม cache ทุกแบบ** แม้แยกรายคน: เรียกตอนใช้ด้วย token ของผู้ใช้คนนั้นทุกครั้ง
- * - ระบบนี้เก็บได้แค่ `person_code` ตอนเกิดรายการ (ข้อ 8) — ไม่เก็บชื่อ อีเมล หรือ field อื่น
- *   คำตอบของ /people/me มีชื่อและอีเมล จึงไม่ log และไม่ส่งต่อทั้งก้อน
+ * Personal data is always fetched on demand with the requesting user's token.
+ * Never cache or persist names, email, or directory results.
  */
 @Injectable()
 export class PeopleService {
@@ -21,33 +33,121 @@ export class PeopleService {
     return this.config.get<number>('coreHub.dataRequestTimeoutMs', 5_000);
   }
 
-  /**
-   * `personCode` ของผู้เรียก จาก `GET /people/me` — รหัสนักศึกษา หรือส่วนหน้าอีเมลของบุคลากร
-   *
-   * - บัญชียังไม่ผูกกับบุคคล (`data: null` เช่น บัญชีทดสอบ) → null
-   * - role ที่อ่านไม่ได้ (`guest` ได้ 403) → null
-   * - Core Hub ตอบ 401 → 401 UNAUTHORIZED ให้ frontend พา SSO ใหม่
-   * - 429 → 503 + Retry-After ของ Core Hub · ล่ม/timeout/คำตอบผิดรูปแบบ → 503 + Retry-After 30
-   */
   async myPersonCode(token: string): Promise<string | null> {
     let body: unknown;
     try {
       body = await getFromCoreHub(`${this.baseUrl}/api/v1/people/me`, token, this.requestTimeoutMs);
     } catch (error) {
-      if (error instanceof CoreHubCallError && error.status === 403) {
-        return null;
-      }
+      if (error instanceof CoreHubCallError && error.status === 403) return null;
       throw coreHubFailure(error);
     }
 
     const { success, data } = (body ?? {}) as { success?: unknown; data?: unknown };
-    if (success === true && data === null) {
-      return null;
-    }
+    if (success === true && data === null) return null;
     const personCode = (data as { personCode?: unknown } | undefined)?.personCode;
     if (success !== true || typeof personCode !== 'string' || personCode.length === 0) {
       throw coreHubFailure(new Error('GET /people/me answered without a personCode'));
     }
     return personCode;
+  }
+
+  /**
+   * Resolve the branch from the signed-in person's profile. The optional configured
+   * department is only a fallback for staff/admin accounts without a department.
+   */
+  async myDepartmentCode(token: string): Promise<string | null> {
+    const configured = this.config.get<string | null>('coreHub.departmentCode');
+    if (configured) return configured;
+
+    let body: unknown;
+    try {
+      body = await getFromCoreHub(`${this.baseUrl}/api/v1/people/me`, token, this.requestTimeoutMs);
+    } catch (error) {
+      if (error instanceof CoreHubCallError && error.status === 403) return null;
+      throw coreHubFailure(error);
+    }
+
+    const { success, data } = (body ?? {}) as { success?: unknown; data?: unknown };
+    if (success !== true || !data || typeof data !== 'object') return null;
+    const department = (data as { department?: { code?: unknown } | null }).department;
+    return typeof department?.code === 'string' && department.code.length > 0 ? department.code : null;
+  }
+
+  /**
+   * Current active student directory for the caller's department. Core Hub enforces
+   * role access; this subsystem does not cache the response or return unrelated fields.
+   */
+  async listActiveStudents(token: string, query: { q?: string; page?: number; entryYear?: number }): Promise<CoreHubStudentPage> {
+    const departmentCode = await this.myDepartmentCode(token);
+    if (!departmentCode) {
+      throw AppException.badRequest(
+        'Core Hub profile has no department; configure CORE_HUB_DEPARTMENT_CODE for this branch',
+      );
+    }
+
+    const page = Number.isInteger(query.page) && (query.page ?? 0) > 0 ? query.page! : 1;
+    const url = new URL(`${this.baseUrl}/api/v1/people`);
+    url.searchParams.set('personType', 'STUDENT');
+    url.searchParams.set('status', 'ACTIVE');
+    url.searchParams.set('departmentCode', departmentCode);
+    url.searchParams.set('page', String(page));
+    url.searchParams.set('limit', '100');
+    if (Number.isInteger(query.entryYear)) url.searchParams.set('entryYear', String(query.entryYear));
+    const q = query.q?.trim();
+    if (q) url.searchParams.set('q', q.slice(0, 100));
+
+    let body: unknown;
+    try {
+      body = await getFromCoreHub(url.toString(), token, this.requestTimeoutMs);
+    } catch (error) {
+      throw coreHubFailure(error);
+    }
+    const response = body as {
+      success?: unknown;
+      data?: unknown;
+      meta?: { total?: unknown; page?: unknown; limit?: unknown; totalPages?: unknown };
+    } | null;
+    const meta = response?.meta;
+    if (
+      response?.success !== true ||
+      !Array.isArray(response.data) ||
+      typeof meta?.total !== 'number' ||
+      typeof meta.page !== 'number' ||
+      typeof meta.limit !== 'number' ||
+      typeof meta.totalPages !== 'number'
+    ) {
+      throw coreHubFailure(new Error('GET /people answered with an invalid directory response'));
+    }
+
+    const items = response.data.flatMap((value): CoreHubStudentOption[] => {
+      if (!value || typeof value !== 'object') return [];
+      const person = value as Record<string, unknown>;
+      if (
+        person.personType !== 'STUDENT' ||
+        person.status !== 'ACTIVE' ||
+        typeof person.personCode !== 'string' ||
+        typeof person.fullNameTh !== 'string'
+      ) {
+        return [];
+      }
+      return [{
+        personCode: person.personCode,
+        fullNameTh: person.fullNameTh,
+        fullNameEn: typeof person.fullNameEn === 'string' ? person.fullNameEn : null,
+        coreUserId: typeof person.coreUserId === 'string' ? person.coreUserId : null,
+        entryYear: typeof person.entryYear === 'number' ? person.entryYear : null,
+      }];
+    });
+
+    return {
+      departmentCode,
+      items,
+      meta: {
+        total: meta.total,
+        page: meta.page,
+        limit: meta.limit,
+        totalPages: meta.totalPages,
+      },
+    };
   }
 }

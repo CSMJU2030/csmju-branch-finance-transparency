@@ -13,9 +13,11 @@ import { SubsystemRole } from './core-hub-identity';
  *   2. for a `student`, the OFFICE (Layer 2) checked in the service against real data
  *      (OfficerScopeService), exactly like `:own`:
  *        - filing (expense / income / bill)     -> active TREASURER of THAT year account
- *        - deciding (approve, reject, void, audit, advance year) -> active BRANCH_HEAD
+ *        - deciding money or advancing the year -> active BRANCH_HEAD
+ *        - audit log read -> STAFF, active BRANCH_HEAD, or ADMIN
  *        - appointing a treasurer               -> active BRANCH_HEAD
- *      An admin decides and appoints without an office.
+ *      STAFF reads financial data, audit logs, manages offices, and may advance the year,
+ *      but cannot decide individual transactions. An admin decides and appoints without an office.
  *
  * Lecturers hold read permissions only. Nobody holds both filing and deciding
  * permissions as a role-level capability for the same person except through the
@@ -96,6 +98,17 @@ const ADMIN_PERMISSIONS: Permission[] = [
   Permission.OFFICER_MANAGE,
 ];
 
+/** Staff read financial data/logs, manage Layer 2 assignments, and may close the year only. */
+const STAFF_PERMISSIONS: Permission[] = [
+  Permission.YEAR_ACCOUNT_READ,
+  Permission.YEAR_ACCOUNT_ADVANCE,
+  Permission.TRANSACTION_READ,
+  Permission.EVIDENCE_READ,
+  Permission.AUDIT_READ,
+  Permission.OFFICER_READ_ANY,
+  Permission.OFFICER_MANAGE,
+];
+
 /** Roles the mapping does not produce but the enum names: they hold nothing. */
 const NO_PERMISSIONS: Permission[] = [];
 
@@ -104,7 +117,7 @@ export const ROLE_PERMISSIONS: Readonly<Record<SubsystemRole, readonly Permissio
     [SubsystemRole.STUDENT]: Object.freeze(STUDENT_PERMISSIONS),
     [SubsystemRole.LECTURER]: Object.freeze(LECTURER_PERMISSIONS),
     [SubsystemRole.ADMIN]: Object.freeze(ADMIN_PERMISSIONS),
-    [SubsystemRole.STAFF]: Object.freeze(NO_PERMISSIONS),
+    [SubsystemRole.STAFF]: Object.freeze(STAFF_PERMISSIONS),
     [SubsystemRole.ALUMNI]: Object.freeze(NO_PERMISSIONS),
   });
 

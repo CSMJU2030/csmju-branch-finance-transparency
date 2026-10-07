@@ -34,9 +34,11 @@ export default async function ApprovalsPage({
   const { me } = session;
   if (!session.caps.canDecide) redirect("/");
 
-  const [pending, years] = await Promise.all([listPending(), listYearAccounts(true)]);
-  if (isUnauthorized(pending, years)) return <ReSignIn />;
-  const yearNames = Object.fromEntries((years.ok ? years.data : []).map((year) => [year.id, year.name]));
+  const years = await listYearAccounts(true);
+  if (isUnauthorized(years)) return <ReSignIn />;
+  const pending = await listPending();
+  if (isUnauthorized(pending)) return <ReSignIn />;
+  const yearNames = Object.fromEntries((years.ok ? years.data : []).map((year) => [year.id, `ชั้นปีที่ ${year.yearLevel}`]));
 
   return (
     <div className="flex flex-col gap-6 p-6 md:p-10">
@@ -61,7 +63,7 @@ export default async function ApprovalsPage({
               <tr>
                 <th className={thClass}>วันที่</th>
                 <th className={thClass}>รายการ</th>
-                <th className={thClass}>รุ่น</th>
+                <th className={thClass}>ชั้นปี</th>
                 <th className={`${thClass} text-right`}>จำนวนเงิน</th>
                 <th className={thClass}>ตัดสิน</th>
               </tr>

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Header, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { CoreHubIdentity } from '../auth/core-hub-identity';
 import { CoreHubAccessToken } from '../auth/decorators/core-hub-access-token.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -19,6 +19,29 @@ export class OfficersController {
   @RequirePermissions(Permission.OFFICER_READ_OWN)
   mine(@CurrentUser() user: CoreHubIdentity) {
     return this.officers.mine(user);
+  }
+
+  /** Current active student directory, fetched from Core Hub without local caching. */
+  @Get('students')
+  @Header('Cache-Control', 'no-store')
+  @RequirePermissions(Permission.OFFICER_MANAGE)
+  students(
+    @CurrentUser() user: CoreHubIdentity,
+    @CoreHubAccessToken() token: string,
+    @Query('q') q?: string,
+    @Query('page') page?: string,
+    @Query('entryYear') entryYear?: string,
+  ) {
+    const parsedPage = page ? Number(page) : 1;
+    const parsedEntryYear = entryYear ? Number(entryYear) : undefined;
+    return this.officers.listAssignableStudents(user, token, { q, page: parsedPage, entryYear: parsedEntryYear });
+  }
+
+  /** Cohort labels needed only by a caller authorized to manage offices. */
+  @Get('year-accounts')
+  @RequirePermissions(Permission.OFFICER_MANAGE)
+  yearAccounts(@CurrentUser() user: CoreHubIdentity) {
+    return this.officers.listAssignableYearAccounts(user);
   }
 
   @Get()

@@ -49,10 +49,28 @@ export class AuditService {
 
   async list(query: ListAuditLogsQueryDto) {
     const where: Prisma.AuditLogWhereInput = {
-      yearAccountId: query.yearAccountId,
       action: query.action,
       targetType: query.targetType,
     };
+    if (query.academicYear) {
+      const periods = await this.prisma.yearLevelPeriod.findMany({
+        where: { academicYear: query.academicYear },
+        select: { yearAccountId: true, startedAt: true, endedAt: true },
+      });
+      where.AND = [
+        {
+          OR: periods.map((period) => ({
+            createdAt: {
+              gte: period.startedAt,
+              ...(period.endedAt ? { lte: period.endedAt } : {}),
+            },
+          })),
+        },
+        ...(query.yearAccountId ? [{ yearAccountId: query.yearAccountId }] : []),
+      ];
+    } else {
+      where.yearAccountId = query.yearAccountId;
+    }
 
     const [items, total] = await Promise.all([
       this.prisma.auditLog.findMany({

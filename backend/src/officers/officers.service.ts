@@ -3,7 +3,7 @@ import { OfficerAssignment, OfficerRole, Prisma } from '../../generated/prisma/c
 import { AuditService } from '../audit/audit.service';
 import { CoreHubIdentity, SubsystemRole } from '../auth/core-hub-identity';
 import { AppException, ErrorCode } from '../common/errors';
-import { PeopleService } from '../core-hub/people.service';
+import { CoreHubStudentPage, PeopleService } from '../core-hub/people.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { isUniqueViolation } from '../shared/transaction-lock';
 import { GrantOfficerDto } from './dto/grant-officer.dto';
@@ -16,7 +16,7 @@ import { OfficerScopeService } from './officer-scope.service';
  *
  * Appointing rules - they exist so that nobody can decide on money they put themselves
  * in a position to decide on:
- *  - a Core Hub ADMIN appoints branch heads and treasurers;
+ *  - a Core Hub ADMIN or subsystem STAFF manages branch heads and treasurers;
  *  - a branch head appoints and releases treasurers, not other branch heads;
  *  - nobody appoints themselves;
  *  - one person never holds both offices at once (filing and deciding stay apart).
@@ -35,9 +35,7 @@ export class OfficersService {
     const assignments = await this.scope.activeAssignments(user.id);
     return {
       isBranchHead: assignments.some((a) => a.officerRole === OfficerRole.BRANCH_HEAD),
-      treasurerYearAccountIds: assignments.flatMap((a) =>
-        a.officerRole === OfficerRole.TREASURER && a.yearAccountId ? [a.yearAccountId] : [],
-      ),
+      treasurerYearAccountIds: await this.scope.treasurerYearAccountIds(user.id),
       assignments,
     };
   }
@@ -61,6 +59,26 @@ export class OfficersService {
       this.prisma.officerAssignment.count({ where }),
     ]);
     return { items, total };
+  }
+
+  /** Read current branch students live from Core Hub; names are never persisted or cached. */
+  async listAssignableStudents(
+    user: CoreHubIdentity,
+    token: string,
+    query: { q?: string; page?: number; entryYear?: number },
+  ): Promise<CoreHubStudentPage> {
+    await this.assertMayManage(user, undefined);
+    return this.people.listActiveStudents(token, query);
+  }
+
+  /** Minimal cohort metadata for the role-assignment form; does not expose balances. */
+  async listAssignableYearAccounts(user: CoreHubIdentity) {
+    await this.assertMayManage(user, undefined);
+    return this.prisma.yearAccount.findMany({
+      where: { active: true },
+      orderBy: [{ yearLevel: 'asc' }, { createdAt: 'asc' }],
+      select: { id: true, yearLevel: true, name: true, entryAcademicYearLabel: true },
+    });
   }
 
   async grant(user: CoreHubIdentity, dto: GrantOfficerDto, token: string): Promise<OfficerAssignment> {
@@ -164,11 +182,14 @@ export class OfficersService {
   }
 
   /**
-   * ADMIN may manage any office; a STUDENT caller must be the branch head, and only
-   * treasurers are theirs to manage. `role` is undefined for a plain listing.
+   * ADMIN and STAFF may manage any office; a STUDENT caller must be the branch head,
+   * and only treasurers are theirs to manage. `role` is undefined for a plain listing.
    */
   private async assertMayManage(user: CoreHubIdentity, role: OfficerRole | undefined): Promise<void> {
     if (user.subsystemRole === SubsystemRole.ADMIN) {
+      return;
+    }
+    if (user.subsystemRole === SubsystemRole.STAFF) {
       return;
     }
     if (user.subsystemRole === SubsystemRole.STUDENT && (await this.scope.isBranchHead(user.id))) {

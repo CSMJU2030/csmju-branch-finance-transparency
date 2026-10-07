@@ -10,6 +10,11 @@ export class CreateExpenseDto {
   @IsUUID()
   yearAccountId!: string;
 
+  @IsInt()
+  @Min(2500)
+  @Max(3000)
+  academicYear!: number;
+
   /** Integer satang (data-dictionary.md 5): 125.50 baht is 12550. Never a float. */
   @IsInt()
   @Min(1)

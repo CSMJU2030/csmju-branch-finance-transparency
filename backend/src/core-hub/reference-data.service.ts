@@ -13,7 +13,7 @@ import {
   ReferenceDatasetConfig,
   ReferenceDatasetName,
 } from './reference-datasets';
-import { ReferenceItem } from './reference-data.types';
+import { AcademicTerm, ReferenceItem } from './reference-data.types';
 
 /** ใช้ใน test เพื่อแทนรายการชุดข้อมูล — แอปจริงใช้ REFERENCE_DATASETS */
 export const REFERENCE_DATASET_REGISTRY = Symbol('REFERENCE_DATASET_REGISTRY');
@@ -120,6 +120,32 @@ export class ReferenceDataService {
         HttpStatus.BAD_REQUEST,
       );
     }
+  }
+
+  /** Four newest academic years, derived from active Core Hub term reference data. */
+  async recentAcademicYears(token: string): Promise<number[]> {
+    const terms = await this.list<AcademicTerm>('academic-terms', token);
+    const currentYear = terms.find((term) => term.isCurrent)?.academicYear ?? Math.max(...terms.map((term) => term.academicYear));
+    return [...new Set(terms.map((term) => term.academicYear))]
+      .filter((year) => year <= currentYear)
+      .sort((a, b) => b - a)
+      .slice(0, 4);
+  }
+
+  /** Academic year boundaries are the first and last active Core Hub terms for that year. */
+  async academicYearRange(token: string, year: number): Promise<{ startDate: string; endDate: string }> {
+    const terms = await this.list<AcademicTerm>('academic-terms', token, (term) => term.academicYear === year);
+    if (terms.length === 0) throw AppException.badRequest(`Academic year ${year} is not available in Core Hub`);
+    return {
+      startDate: terms.map((term) => term.startDate).sort()[0],
+      endDate: terms.map((term) => term.endDate).sort().at(-1)!,
+    };
+  }
+
+  /** Current term is public reference data, so the shared reference cache policy applies. */
+  async currentAcademicTerm(token: string): Promise<AcademicTerm | null> {
+    const current = await this.list<AcademicTerm>('academic-terms', token, (term) => term.isCurrent);
+    return current[0] ?? null;
   }
 
   /** ล้าง cache ทั้งหมด (ใช้ใน test) */

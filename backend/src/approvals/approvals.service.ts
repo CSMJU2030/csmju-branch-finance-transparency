@@ -4,6 +4,7 @@ import { AuditService } from '../audit/audit.service';
 import { CoreHubIdentity } from '../auth/core-hub-identity';
 import { AppException } from '../common/errors';
 import { PeopleService } from '../core-hub/people.service';
+import { ReferenceDataService } from '../core-hub/reference-data.service';
 import { OfficerScopeService } from '../officers/officer-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { lockTransaction } from '../shared/transaction-lock';
@@ -39,16 +40,19 @@ export class ApprovalsService {
     private readonly scope: OfficerScopeService,
     private readonly audit: AuditService,
     private readonly people: PeopleService,
+    private readonly referenceData: ReferenceDataService,
   ) {}
 
   /**
    * Everything waiting for a decision: PENDING expenses and NEEDS_REVIEW income.
    * Oldest first - the longest-waiting request is the one to read next.
    */
-  async listPending(user: CoreHubIdentity): Promise<Transaction[]> {
+  async listPending(user: CoreHubIdentity, academicYear?: number, token?: string): Promise<Transaction[]> {
     await this.scope.assertMayDecide(user);
+    const range = academicYear === undefined ? null : await this.referenceData.academicYearRange(token!, academicYear);
     return this.prisma.transaction.findMany({
       where: {
+        ...(range ? { transactionDate: { gte: new Date(range.startDate), lte: new Date(range.endDate) } } : {}),
         OR: [
           { status: TransactionStatus.PENDING, type: TransactionType.EXPENSE },
           { status: TransactionStatus.NEEDS_REVIEW, type: TransactionType.INCOME },

@@ -19,8 +19,12 @@ export class TransactionsController {
 
   @Get('transactions')
   @RequirePermissions(Permission.TRANSACTION_READ)
-  async list(@CurrentUser() user: CoreHubIdentity, @Query() query: QueryTransactionsDto) {
-    const { items, total } = await this.transactions.list(user, query);
+  async list(
+    @CurrentUser() user: CoreHubIdentity,
+    @CoreHubAccessToken() token: string,
+    @Query() query: QueryTransactionsDto,
+  ) {
+    const { items, total } = await this.transactions.list(user, query, token);
     return new CollectionResult(items, buildPaginationMeta(total, query.page ?? 1, query.take));
   }
 

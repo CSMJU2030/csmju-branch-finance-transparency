@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Query } from '@nestjs/common';
 import { CoreHubIdentity } from '../auth/core-hub-identity';
 import { CoreHubAccessToken } from '../auth/decorators/core-hub-access-token.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { Permission } from '../auth/permissions';
+import { AppException } from '../common/errors';
 import { ApprovalsService } from './approvals.service';
 import { RejectTransactionDto } from './dto/reject-transaction.dto';
 import { VoidTransactionDto } from './dto/void-transaction.dto';
@@ -18,8 +19,16 @@ export class ApprovalsController {
 
   @Get('approvals/pending')
   @RequirePermissions(Permission.APPROVAL_READ)
-  listPending(@CurrentUser() user: CoreHubIdentity) {
-    return this.approvals.listPending(user);
+  listPending(
+    @CurrentUser() user: CoreHubIdentity,
+    @CoreHubAccessToken() token: string,
+    @Query('academicYear') academicYear?: string,
+  ) {
+    const year = academicYear === undefined ? undefined : Number(academicYear);
+    if (year !== undefined && (!Number.isInteger(year) || year < 2500 || year > 3000)) {
+      throw AppException.badRequest('academicYear must be a valid Buddhist calendar year');
+    }
+    return this.approvals.listPending(user, year, token);
   }
 
   @Patch('transactions/:id/approve')

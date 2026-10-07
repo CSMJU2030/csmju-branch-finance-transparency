@@ -2,9 +2,10 @@ import { SubsystemRole } from './core-hub-identity';
 import { CORE_ROLE_TO_SUBSYSTEM_ROLE, mapCoreRoleToSubsystemRole } from './role-mapping';
 
 describe('role mapping (authorization.md 3)', () => {
-  it('maps the three core roles this subsystem accepts', () => {
+  it('maps the core roles this subsystem accepts', () => {
     expect(mapCoreRoleToSubsystemRole('student')).toBe(SubsystemRole.STUDENT);
     expect(mapCoreRoleToSubsystemRole('lecturer')).toBe(SubsystemRole.LECTURER);
+    expect(mapCoreRoleToSubsystemRole('staff')).toBe(SubsystemRole.STAFF);
     expect(mapCoreRoleToSubsystemRole('admin')).toBe(SubsystemRole.ADMIN);
   });
 
@@ -13,8 +14,7 @@ describe('role mapping (authorization.md 3)', () => {
     expect(mapCoreRoleToSubsystemRole('lecturer')).not.toBe(SubsystemRole.ADMIN);
   });
 
-  it('gives staff, alumni and guests no access: unlisted core roles map to null (the guard answers 403)', () => {
-    expect(mapCoreRoleToSubsystemRole('staff')).toBeNull();
+  it('gives alumni and guests no access: unlisted core roles map to null (the guard answers 403)', () => {
     expect(mapCoreRoleToSubsystemRole('alumni')).toBeNull();
     expect(mapCoreRoleToSubsystemRole('guest')).toBeNull();
   });

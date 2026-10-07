@@ -26,7 +26,7 @@ export default function TransactionTable({
           <tr>
             <th className={thClass}>วันที่</th>
             <th className={thClass}>รายการ</th>
-            <th className={thClass}>รุ่น</th>
+            <th className={thClass}>ชั้นปี</th>
             <th className={`${thClass} text-right`}>จำนวนเงิน</th>
             <th className={thClass}>สถานะ</th>
           </tr>

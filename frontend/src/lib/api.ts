@@ -42,6 +42,26 @@ export type YearAccountListItem = {
   active: boolean;
 };
 
+export type AssignableYearAccount = Pick<YearAccountListItem, "id" | "yearLevel" | "name" | "entryAcademicYearLabel">;
+
+export type AcademicYearOption = { academicYear: number };
+
+export type CurrentAcademicTerm = { academicYear: number };
+
+export type BranchStudent = {
+  personCode: string;
+  fullNameTh: string;
+  fullNameEn: string | null;
+  coreUserId: string | null;
+  entryYear: number | null;
+};
+
+export type BranchStudentPage = {
+  departmentCode: string;
+  items: BranchStudent[];
+  meta: PageMeta;
+};
+
 export type YearSummary = {
   yearAccountId: string;
   yearLevel: number;
@@ -204,7 +224,8 @@ export const listYearAccounts = cache((includeArchived: boolean) =>
   call<YearAccountListItem[]>(`/api/v1/year-accounts${includeArchived ? "?includeArchived=true" : ""}`),
 );
 
-export const getYearSummary = (id: string) => call<YearSummary>(`/api/v1/year-accounts/${encodeURIComponent(id)}/summary`);
+export const getYearSummary = (id: string, academicYear?: number) =>
+  call<YearSummary>(`/api/v1/year-accounts/${encodeURIComponent(id)}/summary${academicYear ? `?academicYear=${academicYear}` : ""}`);
 
 export type TransactionQuery = {
   page?: number;
@@ -213,6 +234,7 @@ export type TransactionQuery = {
   type?: string;
   status?: string;
   mine?: boolean;
+  academicYear?: number;
 };
 
 export function listTransactions(query: TransactionQuery) {
@@ -223,22 +245,42 @@ export function listTransactions(query: TransactionQuery) {
   if (query.type) params.set("type", query.type);
   if (query.status) params.set("status", query.status);
   if (query.mine) params.set("mine", "true");
+  if (query.academicYear) params.set("academicYear", String(query.academicYear));
   return call<Transaction[]>(`/api/v1/transactions?${params.toString()}`);
 }
 
 export const getTransaction = (id: string) => call<Transaction>(`/api/v1/transactions/${encodeURIComponent(id)}`);
 export const listEvidence = (id: string) => call<Evidence[]>(`/api/v1/transactions/${encodeURIComponent(id)}/evidence`);
 export const getAuditTrail = (id: string) => call<AuditLog[]>(`/api/v1/transactions/${encodeURIComponent(id)}/audit`);
-export const listPending = () => call<Transaction[]>("/api/v1/approvals/pending");
+export const listPending = (academicYear?: number) =>
+  call<Transaction[]>(`/api/v1/approvals/pending${academicYear ? `?academicYear=${academicYear}` : ""}`);
 
-export function listAuditLogs(query: { page?: number; action?: string; targetType?: string }) {
+export function listAuditLogs(query: { page?: number; action?: string; targetType?: string; academicYear?: number }) {
   const params = new URLSearchParams({ page: String(query.page ?? 1), limit: "30" });
   if (query.action) params.set("action", query.action);
   if (query.targetType) params.set("targetType", query.targetType);
+  if (query.academicYear) params.set("academicYear", String(query.academicYear));
   return call<AuditLog[]>(`/api/v1/audit-logs?${params.toString()}`);
 }
 
 export const listOfficers = () => call<OfficerAssignment[]>("/api/v1/officer-assignments?active=true&limit=100");
+export const listAssignableYearAccounts = () => call<AssignableYearAccount[]>("/api/v1/officer-assignments/year-accounts");
+
+export const getCurrentAcademicTerm = cache(() =>
+  call<CurrentAcademicTerm | null>("/api/v1/core-hub/academic-terms/current"),
+);
+
+export const getRecentAcademicYears = cache(() =>
+  call<number[]>("/api/v1/core-hub/academic-years"),
+);
+
+/** Personal directory results are always requested with no-store and never memoized. */
+export function listAssignableStudents(query: { q?: string; page?: number; entryYear?: number }) {
+  const params = new URLSearchParams({ page: String(query.page ?? 1) });
+  if (query.q?.trim()) params.set("q", query.q.trim());
+  if (query.entryYear !== undefined) params.set("entryYear", String(query.entryYear));
+  return call<BranchStudentPage>(`/api/v1/officer-assignments/students?${params.toString()}`);
+}
 
 /** GET /api/health - public. */
 export async function getHealth(): Promise<{ status: string; service?: string } | null> {

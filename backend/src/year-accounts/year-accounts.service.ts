@@ -4,6 +4,7 @@ import { AuditService } from '../audit/audit.service';
 import { CoreHubIdentity } from '../auth/core-hub-identity';
 import { AppException } from '../common/errors';
 import { PeopleService } from '../core-hub/people.service';
+import { ReferenceDataService } from '../core-hub/reference-data.service';
 import { OfficerScopeService } from '../officers/officer-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -19,6 +20,7 @@ export class YearAccountsService {
     private readonly scope: OfficerScopeService,
     private readonly audit: AuditService,
     private readonly people: PeopleService,
+    private readonly referenceData: ReferenceDataService,
   ) {}
 
   listAll(includeArchived: boolean) {
@@ -44,15 +46,29 @@ export class YearAccountsService {
    * construction (voiding moves the row out of APPROVED). Archived cohorts can be
    * read too, so a graduated cohort's books stay open to inspection.
    */
-  async getSummary(yearAccountId: string) {
+  async getSummary(yearAccountId: string, academicYear?: number, token?: string) {
     const year = await this.prisma.yearAccount.findUnique({ where: { id: yearAccountId } });
     if (!year) {
       throw AppException.notFound('Year account not found');
     }
 
+    const range = academicYear !== undefined
+      ? await this.referenceData.academicYearRange(token!, academicYear)
+      : null;
+    const selectedPeriod = academicYear !== undefined
+      ? await this.prisma.yearLevelPeriod.findUnique({
+          where: { yearAccountId_academicYear: { yearAccountId, academicYear: String(academicYear) } },
+        })
+      : null;
+    if (academicYear !== undefined && !selectedPeriod) {
+      throw AppException.badRequest('This cohort did not exist in the selected academic year');
+    }
+    const dateFilter = range
+      ? { transactionDate: { gte: new Date(range.startDate), lte: new Date(range.endDate) } }
+      : {};
     const sum = (type: TransactionType, status: TransactionStatus) =>
       this.prisma.transaction.aggregate({
-        where: { yearAccountId, type, status },
+        where: { yearAccountId, type, status, ...dateFilter },
         _sum: { amountSatang: true },
       });
     const [income, expense, pendingExpense, periods] = await Promise.all([
@@ -70,17 +86,24 @@ export class YearAccountsService {
 
     const approvedIncomeSatang = income._sum.amountSatang ?? 0;
     const approvedExpenseSatang = expense._sum.amountSatang ?? 0;
+    const priorPeriod = academicYear === undefined ? null : periods
+      .filter((period) => Number(period.academicYear) < academicYear)
+      .sort((a, b) => Number(b.academicYear) - Number(a.academicYear))[0];
+    const openingBalanceSatang = selectedPeriod
+      ? priorPeriod?.closingBalanceSatang ?? year.openingBalanceSatang
+      : year.openingBalanceSatang;
 
     return {
       yearAccountId: year.id,
-      yearLevel: year.yearLevel,
+      academicYear: selectedPeriod?.academicYear ?? null,
+      yearLevel: selectedPeriod?.yearLevel ?? year.yearLevel,
       name: year.name,
       currency: year.currency,
       active: year.active,
-      openingBalanceSatang: year.openingBalanceSatang,
+      openingBalanceSatang,
       approvedIncomeSatang,
       approvedExpenseSatang,
-      balanceSatang: calculateBalanceSatang(year.openingBalanceSatang, approvedIncomeSatang, approvedExpenseSatang),
+      balanceSatang: calculateBalanceSatang(openingBalanceSatang, approvedIncomeSatang, approvedExpenseSatang),
       pendingExpenseTotalSatang: pendingExpense._sum.amountSatang ?? 0,
       periods,
     };
@@ -96,7 +119,7 @@ export class YearAccountsService {
    * same academic year must not both pass the "already advanced" check.
    */
   async advanceAcademicYear(user: CoreHubIdentity, newAcademicYear: string, token: string) {
-    await this.scope.assertMayDecide(user);
+    await this.scope.assertMayAdvanceAcademicYear(user);
     const personCode = await this.people.myPersonCode(token);
 
     try {

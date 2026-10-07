@@ -50,10 +50,21 @@ function back(path: string, result: Result, ok: string): never {
 }
 
 // ---------------------------------------------------------------------------
-// Treasurer: files expenses and income, attaches the evidence
+// Treasurer: files expenses and income with required evidence
 // ---------------------------------------------------------------------------
 
 async function createEntry(formData: FormData, kind: "expense" | "income") {
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    fail("/entries", "กรุณาแนบไฟล์หลักฐานก่อนส่งรายการ");
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    fail("/entries", "ไฟล์หลักฐานต้องมีขนาดไม่เกิน 10 MB");
+  }
+  if (!["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    fail("/entries", "ไฟล์หลักฐานต้องเป็น PDF, JPEG, PNG หรือ WebP");
+  }
+
   const amountSatang = parseBahtToSatang(text(formData, "amount"));
   if (amountSatang === null) fail("/entries", INVALID_AMOUNT);
 
@@ -63,6 +74,7 @@ async function createEntry(formData: FormData, kind: "expense" | "income") {
     body: {
       yearAccountId: text(formData, "yearAccountId"),
       amountSatang,
+      academicYear: Number(text(formData, "academicYear")),
       transactionDate: text(formData, "transactionDate"),
       description: text(formData, "description"),
       ...(category ? { category } : {}),
@@ -70,9 +82,19 @@ async function createEntry(formData: FormData, kind: "expense" | "income") {
   });
 
   if (result.ok) {
-    // The evidence comes next: nothing is approved or confirmed without a bill.
-    const done = kind === "expense" ? "ยื่นรายจ่ายแล้ว" : "บันทึกรายรับแล้ว";
-    redirect(withParams(`/transactions/${result.data.id}`, { ok: `${done} — แนบหลักฐานเพื่อให้ตรวจสอบได้` }));
+    const page = `/transactions/${encodeURIComponent(result.data.id)}`;
+    const evidenceForm = new FormData();
+    evidenceForm.append("file", file, file.name);
+    const evidence = await call(`/api/v1/transactions/${encodeURIComponent(result.data.id)}/evidence`, {
+      method: "POST",
+      form: evidenceForm,
+    });
+    if (!evidence.ok) {
+      if (evidence.status === 401) signInAgain(page);
+      fail(page, `บันทึกรายการแล้ว แต่แนบหลักฐานไม่สำเร็จ กรุณาลองแนบอีกครั้งจากหน้ารายการ: ${describeError(evidence.status, evidence.message)}`);
+    }
+    const done = kind === "expense" ? "ยื่นรายจ่ายพร้อมหลักฐานแล้ว" : "บันทึกรายรับพร้อมหลักฐานแล้ว";
+    redirect(withParams(page, { ok: done }));
   }
   back("/entries", result, "");
 }

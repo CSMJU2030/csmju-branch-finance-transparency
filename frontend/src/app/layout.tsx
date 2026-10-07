@@ -42,22 +42,30 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     // Only students can hold an office; the lookup is cached, so gate() does not repeat it.
     const offices = await getMyOffices(me.data);
     const caps = capsOf(me.data, offices.ok ? offices.data : null);
-    const nav: NavItem[] = [
-      { label: "ภาพรวม", labelEn: "Overview", href: "/", icon: "dashboard" },
-      { label: "รายการทั้งหมด", labelEn: "Transactions", href: "/transactions", icon: "receipt" },
-      ...(caps.canFile
-        ? [{ label: "ยื่นรายการ", labelEn: "File entry", href: "/entries", icon: "description" } satisfies NavItem]
-        : []),
-      ...(caps.canDecide
+    const nav: NavItem[] =
+      me.data.subsystemRole === "STAFF"
         ? [
-            { label: "รออนุมัติ", labelEn: "Approvals", href: "/approvals", icon: "event" } satisfies NavItem,
-            { label: "ประวัติการตรวจสอบ", labelEn: "Audit", href: "/audit-logs", icon: "menu-book" } satisfies NavItem,
+            { label: "ภาพรวม", labelEn: "Overview", href: "/", icon: "dashboard" },
+            { label: "รายการทั้งหมด", labelEn: "Transactions", href: "/transactions", icon: "receipt" },
+            { label: "ประวัติการตรวจสอบ", labelEn: "Audit", href: "/audit-logs", icon: "menu-book" },
+            { label: "แต่งตั้งเจ้าหน้าที่", labelEn: "Offices", href: "/officers", icon: "group" },
           ]
-        : []),
-      ...(caps.canManageOffices
-        ? [{ label: "ตำแหน่งในระบบ", labelEn: "Offices", href: "/officers", icon: "group" } satisfies NavItem]
-        : []),
-    ];
+        : [
+            { label: "ภาพรวม", labelEn: "Overview", href: "/", icon: "dashboard" },
+            { label: "รายการทั้งหมด", labelEn: "Transactions", href: "/transactions", icon: "receipt" },
+            ...(caps.canFile
+              ? [{ label: "ยื่นรายการ", labelEn: "File entry", href: "/entries", icon: "description" } satisfies NavItem]
+              : []),
+            ...(caps.canDecide
+              ? [{ label: "รออนุมัติ", labelEn: "Approvals", href: "/approvals", icon: "event" } satisfies NavItem]
+              : []),
+            ...(caps.canViewAudit
+              ? [{ label: "ประวัติการตรวจสอบ", labelEn: "Audit", href: "/audit-logs", icon: "menu-book" } satisfies NavItem]
+              : []),
+            ...(caps.canManageOffices
+              ? [{ label: "แต่งตั้งเจ้าหน้าที่", labelEn: "Offices", href: "/officers", icon: "group" } satisfies NavItem]
+              : []),
+          ];
     body = (
       <CsmjuAppShell
         displayName={DISPLAY_NAME}
@@ -75,7 +83,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="th" className={`${jakarta.variable} ${notoSansThai.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col bg-background text-on-surface">{body}</body>
+      <body className="min-h-full flex flex-col bg-background text-on-surface">
+        {body}
+      </body>
     </html>
   );
 }

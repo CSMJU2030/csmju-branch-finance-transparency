@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { PageHeader, cardClass, inputClass, primaryButtonClass, tdClass, thClass } from "@/csmju";
 import Pager from "@/components/Pager";
 import ReSignIn from "@/components/ReSignIn";
-import { isUnauthorized, listAuditLogs } from "@/lib/api";
+import { getRecentAcademicYears, isUnauthorized, listAuditLogs } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { gate } from "@/lib/gate";
 import { AUDIT_ACTION_LABEL } from "@/lib/labels";
@@ -10,19 +10,25 @@ import { AUDIT_ACTION_LABEL } from "@/lib/labels";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "ประวัติการตรวจสอบ" };
 
-type Query = { page?: string; action?: string; targetType?: string };
+type Query = { page?: string; action?: string; targetType?: string; academicYear?: string };
 
 /** Append-only log of everything that changed: the database refuses to update or delete it. */
 export default async function AuditLogsPage({ searchParams }: { searchParams: Promise<Query> }) {
   const query = await searchParams;
   const session = await gate();
   if ("view" in session) return session.view;
-  if (!session.caps.canDecide) redirect("/");
+  if (!session.caps.canViewAudit) redirect("/");
 
+  const academicYears = await getRecentAcademicYears();
+  if (isUnauthorized(academicYears)) return <ReSignIn />;
+  const selectedYear = academicYears.ok && academicYears.data.includes(Number(query.academicYear))
+    ? Number(query.academicYear)
+    : undefined;
   const logs = await listAuditLogs({
     page: Number(query.page) > 0 ? Number(query.page) : 1,
     action: query.action,
     targetType: query.targetType,
+    academicYear: selectedYear,
   });
   if (isUnauthorized(logs)) return <ReSignIn />;
 
@@ -34,6 +40,15 @@ export default async function AuditLogsPage({ searchParams }: { searchParams: Pr
       />
 
       <form method="get" className={`${cardClass} flex flex-wrap items-end gap-4 p-4`}>
+        <label className="flex flex-col gap-1 text-label-md">
+          ปีการศึกษา
+          <select name="academicYear" defaultValue={selectedYear ?? ""} className={inputClass}>
+            <option value="">ทั้งหมด</option>
+            {(academicYears.ok ? academicYears.data : []).map((year) => (
+              <option key={year} value={year}>ปีการศึกษา {year}</option>
+            ))}
+          </select>
+        </label>
         <label className="flex flex-col gap-1 text-label-md">
           การกระทำ
           <select name="action" defaultValue={query.action ?? ""} className={inputClass}>
@@ -63,7 +78,7 @@ export default async function AuditLogsPage({ searchParams }: { searchParams: Pr
                   <th className={thClass}>เวลา</th>
                   <th className={thClass}>การกระทำ</th>
                   <th className={thClass}>โดย</th>
-                  <th className={thClass}>รุ่น</th>
+                  <th className={thClass}>ชั้นปี</th>
                   <th className={thClass}>หมายเหตุ</th>
                 </tr>
               </thead>
@@ -73,7 +88,7 @@ export default async function AuditLogsPage({ searchParams }: { searchParams: Pr
                     <td className={`${tdClass} whitespace-nowrap`}>{formatDateTime(log.createdAt)}</td>
                     <td className={tdClass}>{AUDIT_ACTION_LABEL[log.action] ?? log.action}</td>
                     <td className={tdClass}>{log.actorPersonCode ?? log.actorCoreUserId ?? "ระบบ"}</td>
-                    <td className={tdClass}>{log.yearAccount?.name ?? "—"}</td>
+                    <td className={tdClass}>{log.yearAccount ? `ชั้นปีที่ ${log.yearAccount.yearLevel}` : "—"}</td>
                     <td className={tdClass}>{log.metadataJson?.reason ?? ""}</td>
                   </tr>
                 ))}
@@ -83,7 +98,7 @@ export default async function AuditLogsPage({ searchParams }: { searchParams: Pr
               <p className="px-6 py-10 text-center text-body-md text-on-surface-variant">ไม่พบบันทึก</p>
             )}
           </div>
-          <Pager meta={logs.meta} path="/audit-logs" query={{ action: query.action, targetType: query.targetType }} />
+          <Pager meta={logs.meta} path="/audit-logs" query={{ action: query.action, targetType: query.targetType, academicYear: selectedYear?.toString() }} />
         </div>
       )}
     </div>
