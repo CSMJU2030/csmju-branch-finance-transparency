@@ -273,10 +273,6 @@ export const getRecentAcademicYears = cache(() =>
   call<number[]>("/api/v1/core-hub/academic-years"),
 );
 
-export const getAssignableEntryYears = cache(() =>
-  call<number[]>("/api/v1/officer-assignments/entry-years"),
-);
-
 /** Personal directory results are always requested with no-store and never memoized. */
 export function listAssignableStudents(query: { q?: string; page?: number; entryYear?: number }) {
   const params = new URLSearchParams({ page: String(query.page ?? 1) });

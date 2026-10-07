@@ -31,46 +31,6 @@ export class PeopleService {
     return this.config.get<number>('coreHub.dataRequestTimeoutMs', 5_000);
   }
 
-  async listActiveEntryYears(token: string): Promise<number[]> {
-    const years = new Set<number>();
-    let page = 1;
-    let totalPages = 1;
-
-    do {
-      const url = new URL(this.baseUrl + '/api/v1/people');
-      url.searchParams.set('personType', 'STUDENT');
-      url.searchParams.set('status', 'ACTIVE');
-      url.searchParams.set('page', String(page));
-      url.searchParams.set('limit', '100');
-
-      let body: unknown;
-      try {
-        body = await getFromCoreHub(url.toString(), token, this.requestTimeoutMs);
-      } catch (error) {
-        throw coreHubFailure(error);
-      }
-
-      const response = body as {
-        success?: unknown;
-        data?: unknown;
-        meta?: { totalPages?: unknown };
-      } | null;
-      if (response?.success !== true || !Array.isArray(response.data) || typeof response.meta?.totalPages !== 'number') {
-        throw coreHubFailure(new Error('GET /people answered with an invalid entry-year response'));
-      }
-
-      for (const value of response.data) {
-        if (!value || typeof value !== 'object') continue;
-        const entryYear = (value as Record<string, unknown>).entryYear;
-        if (typeof entryYear === 'number') years.add(entryYear);
-      }
-      totalPages = response.meta.totalPages;
-      page += 1;
-    } while (page <= totalPages);
-
-    return [...years].sort((a, b) => b - a);
-  }
-
   async myPersonCode(token: string): Promise<string | null> {
     let body: unknown;
     try {

@@ -71,10 +71,6 @@ export class OfficersService {
     return this.people.listActiveStudents(token, query);
   }
 
-  async listAssignableEntryYears(token: string): Promise<number[]> {
-    return this.people.listActiveEntryYears(token);
-  }
-
   /** Minimal cohort metadata for the role-assignment form; does not expose balances. */
   async listAssignableYearAccounts(user: CoreHubIdentity) {
     await this.assertMayManage(user, undefined);
