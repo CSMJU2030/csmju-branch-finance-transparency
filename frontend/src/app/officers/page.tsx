@@ -45,7 +45,6 @@ export default async function OfficersPage({
     : SUPPORTED_ENTRY_YEARS[0];
   const students = await listAssignableStudents({ q, page, entryYear: selectedEntryYear });
   if (isUnauthorized(students)) return <ReSignIn />;
-  const yearNames = Object.fromEntries((years.ok ? years.data : []).map((year) => [year.id, `ชั้นปีที่ ${year.yearLevel}`]));
   const studentByCoreUserId = new Map(
     students.ok ? students.data.items.filter((student) => student.coreUserId).map((student) => [student.coreUserId!, student]) : [],
   );
@@ -94,27 +93,7 @@ export default async function OfficersPage({
       )}
 
       <form action={grantOfficer} className={`${cardClass} grid gap-4 p-6 lg:grid-cols-2`}>
-        <label className="flex flex-col gap-1 text-label-md">
-          ตำแหน่ง
-          <select name="officerRole" required className={inputClass} defaultValue="TREASURER">
-            <option value="TREASURER">{OFFICER_LABEL.TREASURER} (ประจำชั้นปี)</option>
-            {caps.canManageAllOffices && <option value="BRANCH_HEAD">{OFFICER_LABEL.BRANCH_HEAD} (ประจำชั้นปี)</option>}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-label-md">
-          ชั้นปีที่แต่งตั้งให้ดูแล
-          <select name="yearAccountId" required className={inputClass} defaultValue={assignableYearAccounts[0]?.id ?? ""}>
-            <option value="">เลือกชั้นปีที่ดูแล</option>
-            {assignableYearAccounts.map((year) => (
-              <option key={year.id} value={year.id}>
-                ชั้นปีที่ {year.yearLevel} · รุ่นปีแรกเข้า พ.ศ. {year.entryAcademicYearLabel ?? "—"}
-              </option>
-            ))}
-          </select>
-          {!assignableYearAccounts.length && (
-            <span className="text-caption text-error">ยังไม่มีบัญชีชั้นปีที่ใช้งานอยู่ กรุณาสร้างบัญชีชั้นปีก่อนแต่งตั้งเหรัญญิก</span>
-          )}
-        </label>
+        <OfficerAssignmentFields canManageAllOffices={caps.canManageAllOffices} yearAccounts={assignableYearAccounts} />
         {students.ok && (
           <StudentPicker students={students.data.items} entryYear={selectedEntryYear} initialQuery={q} />
         )}
@@ -159,8 +138,9 @@ export default async function OfficersPage({
               {assignments.data.map((assignment) => (
                 <tr key={assignment.id}>
                   <td className={tdClass}>{OFFICER_LABEL[assignment.officerRole]}</td>
-                  <td className={tdClass}>{assignment.personCode ?? "—"}</td>
+                  <td className={tdClass}>{assignableYearAccounts.find((year) => year.id === assignment.yearAccountId)?.yearLevel ? `ชั้นปีที่ ${assignableYearAccounts.find((year) => year.id === assignment.yearAccountId)?.yearLevel}` : "—"}</td>
                   <td className={tdClass}>{studentByCoreUserId.get(assignment.coreUserId)?.fullNameTh ?? "—"}</td>
+                  <td className={`${tdClass} whitespace-nowrap`}>{assignment.personCode ?? "—"}</td>
                   <td className={`${tdClass} whitespace-nowrap`}>{formatDateTime(assignment.activeFrom)}</td>
                   <td className={tdClass}>
                     {/* branch heads can release treasurers only; backend permissions are authoritative */}
