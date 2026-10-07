@@ -87,11 +87,8 @@ export class OfficersService {
     if (dto.coreUserId === user.id) {
       throw AppException.forbidden('Nobody can appoint themselves');
     }
-    if (dto.officerRole === OfficerRole.TREASURER && !dto.yearAccountId) {
-      throw this.invalid('yearAccountId is required for a TREASURER');
-    }
-    if (dto.officerRole === OfficerRole.BRANCH_HEAD && dto.yearAccountId) {
-      throw this.invalid('yearAccountId must not be set for a BRANCH_HEAD');
+    if (!dto.yearAccountId) {
+      throw this.invalid('yearAccountId is required for an officer assignment');
     }
 
     if (dto.yearAccountId) {
@@ -139,7 +136,7 @@ export class OfficersService {
       });
     } catch (error) {
       if (isUniqueViolation(error)) {
-        throw AppException.conflict('That office is already held by someone');
+        throw AppException.conflict('ตำแหน่งนี้ของชั้นปีที่เลือกมีผู้รับผิดชอบอยู่แล้ว');
       }
       throw error;
     }

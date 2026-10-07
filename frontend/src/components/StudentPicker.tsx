@@ -7,11 +7,11 @@ import { inputClass, primaryButtonClass } from "@/csmju";
 
 export default function StudentPicker({
   students,
-  academicYear,
+  entryYear,
   initialQuery = "",
 }: {
   students: BranchStudent[];
-  academicYear?: number;
+  entryYear?: number;
   initialQuery?: string;
 }) {
   const router = useRouter();
@@ -29,7 +29,7 @@ export default function StudentPicker({
   }, [available.length, selected]);
   const search = () => {
     const params = new URLSearchParams();
-    if (academicYear) params.set("academicYear", String(academicYear));
+    if (entryYear) params.set("entryYear", String(entryYear));
     const searchTerm = selected?.personCode ?? value.trim();
     if (searchTerm) params.set("q", searchTerm);
     router.push(`/officers${params.size ? `?${params}` : ""}`);

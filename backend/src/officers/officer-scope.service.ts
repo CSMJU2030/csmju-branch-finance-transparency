@@ -11,7 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
  * `:own` is.
  *
  *   TREASURER    active assignment for the year account being touched
- *   BRANCH_HEAD  active branch-wide assignment (an admin decides without one)
+ *   BRANCH_HEAD  active assignment for the year account being decided
  *
  * The answer is always one plain 403, whatever the reason, so a response never tells a
  * caller which offices exist.
@@ -54,13 +54,23 @@ export class OfficerScopeService {
   }
 
   /** Deciding on money (approve, reject, void, advance the year): the branch head or an admin. */
-  async assertMayDecide(user: CoreHubIdentity): Promise<void> {
+  async branchHeadYearAccountIds(coreUserId: string): Promise<string[]> {
+    const rows = await this.prisma.officerAssignment.findMany({
+      where: { coreUserId, officerRole: OfficerRole.BRANCH_HEAD, activeTo: null },
+      select: { yearAccountId: true },
+    });
+    return rows.flatMap((row) => (row.yearAccountId ? [row.yearAccountId] : []));
+  }
+
+  async assertMayDecide(user: CoreHubIdentity, yearAccountId?: string): Promise<void> {
     if (user.subsystemRole === SubsystemRole.ADMIN) {
       return;
     }
-    if (!(await this.isBranchHead(user.id))) {
-      throw AppException.forbidden('Only the branch head can do this');
+    const ids = await this.branchHeadYearAccountIds(user.id);
+    if (yearAccountId && ids.includes(yearAccountId)) {
+      return;
     }
+    throw AppException.forbidden('Only the branch head responsible for this year can do this');
   }
 
   /** Closing the academic year: staff, the branch head, or an admin. */

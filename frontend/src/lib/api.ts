@@ -57,7 +57,6 @@ export type BranchStudent = {
 };
 
 export type BranchStudentPage = {
-  departmentCode: string;
   items: BranchStudent[];
   meta: PageMeta;
 };
@@ -94,7 +93,7 @@ export type Transaction = {
   description: string;
   category: string | null;
   createdByCoreUserId: string;
-  /** Shown instead of a name: no names or emails are kept (reference-data.md 8). */
+  /** Core Hub person code of the creator. */
   createdByPersonCode: string | null;
   approvedByCoreUserId: string | null;
   approvedByPersonCode: string | null;
@@ -141,8 +140,8 @@ export type OfficerAssignment = {
   coreUserId: string;
   personCode: string | null;
   officerRole: OfficerRole;
-  /** The cohort of a treasurer; null for the branch head. */
-  yearAccountId: string | null;
+  /** The cohort/year this officer is appointed to care for. */
+  yearAccountId: string;
   activeFrom: string;
   activeTo: string | null;
 };
@@ -255,11 +254,11 @@ export const getAuditTrail = (id: string) => call<AuditLog[]>(`/api/v1/transacti
 export const listPending = (academicYear?: number) =>
   call<Transaction[]>(`/api/v1/approvals/pending${academicYear ? `?academicYear=${academicYear}` : ""}`);
 
-export function listAuditLogs(query: { page?: number; action?: string; targetType?: string; academicYear?: number }) {
+export function listAuditLogs(query: { page?: number; action?: string; targetType?: string; yearAccountId?: string }) {
   const params = new URLSearchParams({ page: String(query.page ?? 1), limit: "30" });
   if (query.action) params.set("action", query.action);
   if (query.targetType) params.set("targetType", query.targetType);
-  if (query.academicYear) params.set("academicYear", String(query.academicYear));
+  if (query.yearAccountId) params.set("yearAccountId", query.yearAccountId);
   return call<AuditLog[]>(`/api/v1/audit-logs?${params.toString()}`);
 }
 

@@ -271,7 +271,7 @@ export default async function TransactionPage({
               <li key={entry.id} className="flex flex-wrap gap-x-3 border-b border-outline-variant/30 pb-2">
                 <span className="whitespace-nowrap text-on-surface-variant">{formatDateTime(entry.createdAt)}</span>
                 <span>{AUDIT_ACTION_LABEL[entry.action] ?? entry.action}</span>
-                <span className="text-on-surface-variant">โดย {entry.actorPersonCode ?? entry.actorCoreUserId ?? "ระบบ"}</span>
+                <span className="text-on-surface-variant">โดย {entry.actorPersonCode ?? "ระบบ"}</span>
                 {entry.metadataJson?.reason && <span className="text-on-surface-variant">— {entry.metadataJson.reason}</span>}
               </li>
             ))}

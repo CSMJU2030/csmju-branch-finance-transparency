@@ -15,7 +15,7 @@ export class GrantOfficerDto {
   @IsEnum(OfficerRole)
   officerRole!: OfficerRole;
 
-  /** Required for TREASURER (the cohort), forbidden for BRANCH_HEAD. */
+  /** Required for both offices: the cohort/year the officer is appointed to care for. */
   @IsOptional()
   @IsUUID()
   yearAccountId?: string;

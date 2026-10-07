@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { PageHeader, cardClass, inputClass, primaryButtonClass, tdClass, thClass } from "@/csmju";
 import Pager from "@/components/Pager";
 import ReSignIn from "@/components/ReSignIn";
-import { getRecentAcademicYears, isUnauthorized, listAuditLogs } from "@/lib/api";
+import { isUnauthorized, listAuditLogs, listYearAccounts } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { gate } from "@/lib/gate";
 import { AUDIT_ACTION_LABEL } from "@/lib/labels";
@@ -10,7 +10,7 @@ import { AUDIT_ACTION_LABEL } from "@/lib/labels";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "ประวัติการตรวจสอบ" };
 
-type Query = { page?: string; action?: string; targetType?: string; academicYear?: string };
+type Query = { page?: string; action?: string; targetType?: string; entryYear?: string; yearAccountId?: string };
 
 /** Append-only log of everything that changed: the database refuses to update or delete it. */
 export default async function AuditLogsPage({ searchParams }: { searchParams: Promise<Query> }) {
@@ -19,16 +19,17 @@ export default async function AuditLogsPage({ searchParams }: { searchParams: Pr
   if ("view" in session) return session.view;
   if (!session.caps.canViewAudit) redirect("/");
 
-  const academicYears = await getRecentAcademicYears();
-  if (isUnauthorized(academicYears)) return <ReSignIn />;
-  const selectedYear = academicYears.ok && academicYears.data.includes(Number(query.academicYear))
-    ? Number(query.academicYear)
+  const years = await listYearAccounts(true);
+  if (isUnauthorized(years)) return <ReSignIn />;
+  const selectedEntryYear = Number(query.entryYear);
+  const selectedYearAccount = years.ok
+    ? years.data.find((year) => year.entryAcademicYearLabel === String(selectedEntryYear))
     : undefined;
   const logs = await listAuditLogs({
     page: Number(query.page) > 0 ? Number(query.page) : 1,
     action: query.action,
     targetType: query.targetType,
-    academicYear: selectedYear,
+    yearAccountId: selectedYearAccount?.id ?? query.yearAccountId,
   });
   if (isUnauthorized(logs)) return <ReSignIn />;
 
@@ -41,11 +42,11 @@ export default async function AuditLogsPage({ searchParams }: { searchParams: Pr
 
       <form method="get" className={`${cardClass} flex flex-wrap items-end gap-4 p-4`}>
         <label className="flex flex-col gap-1 text-label-md">
-          ปีการศึกษา
-          <select name="academicYear" defaultValue={selectedYear ?? ""} className={inputClass}>
-            <option value="">ทั้งหมด</option>
-            {(academicYears.ok ? academicYears.data : []).map((year) => (
-              <option key={year} value={year}>ปีการศึกษา {year}</option>
+          รุ่นปีแรกเข้า
+          <select name="entryYear" defaultValue={selectedYearAccount?.entryAcademicYearLabel ?? ""} className={inputClass}>
+            <option value="">ทุกชั้นปี</option>
+            {(years.ok ? years.data : []).map((year) => (
+              <option key={year.id} value={year.entryAcademicYearLabel ?? ""}>พ.ศ. {year.entryAcademicYearLabel ?? "—"} · ชั้นปีที่ {year.yearLevel}</option>
             ))}
           </select>
         </label>
@@ -87,7 +88,7 @@ export default async function AuditLogsPage({ searchParams }: { searchParams: Pr
                   <tr key={log.id}>
                     <td className={`${tdClass} whitespace-nowrap`}>{formatDateTime(log.createdAt)}</td>
                     <td className={tdClass}>{AUDIT_ACTION_LABEL[log.action] ?? log.action}</td>
-                    <td className={tdClass}>{log.actorPersonCode ?? log.actorCoreUserId ?? "ระบบ"}</td>
+                    <td className={tdClass}>{log.actorPersonCode ?? "ระบบ"}</td>
                     <td className={tdClass}>{log.yearAccount ? `ชั้นปีที่ ${log.yearAccount.yearLevel}` : "—"}</td>
                     <td className={tdClass}>{log.metadataJson?.reason ?? ""}</td>
                   </tr>
@@ -98,7 +99,7 @@ export default async function AuditLogsPage({ searchParams }: { searchParams: Pr
               <p className="px-6 py-10 text-center text-body-md text-on-surface-variant">ไม่พบบันทึก</p>
             )}
           </div>
-          <Pager meta={logs.meta} path="/audit-logs" query={{ action: query.action, targetType: query.targetType, academicYear: selectedYear?.toString() }} />
+          <Pager meta={logs.meta} path="/audit-logs" query={{ action: query.action, targetType: query.targetType, entryYear: selectedYearAccount?.entryAcademicYearLabel ?? undefined }} />
         </div>
       )}
     </div>

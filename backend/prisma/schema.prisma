@@ -99,9 +99,9 @@ enum IntegrationEventStatus {
 /// History, not a flag: closing a row (`active_to`) and opening another keeps the audit
 /// trail meaningful when an officer changes.
 ///
-/// TREASURER rows carry a year account (one active treasurer per cohort, enforced by a
-/// partial unique index in the migration); the same treasurer follows the cohort through
-/// all four years. BRANCH_HEAD rows have no year account: the branch head is branch-wide.
+/// TREASURER and BRANCH_HEAD rows both carry a year account (one active officer of each
+/// office per cohort, enforced by partial unique indexes in the migration). Each branch
+/// head is responsible only for the cohort/year they were appointed to.
 ///
 /// When Core Hub can carry per-person subsystem roles in the token
 /// (subsystem-registry.md 7) this table can be retired.
