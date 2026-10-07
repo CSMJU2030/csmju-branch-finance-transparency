@@ -93,7 +93,7 @@ export type Transaction = {
   description: string;
   category: string | null;
   createdByCoreUserId: string;
-  /** Shown instead of a name: no names or emails are kept (reference-data.md 8). */
+  /** Core Hub person code of the creator. */
   createdByPersonCode: string | null;
   approvedByCoreUserId: string | null;
   approvedByPersonCode: string | null;
@@ -140,8 +140,8 @@ export type OfficerAssignment = {
   coreUserId: string;
   personCode: string | null;
   officerRole: OfficerRole;
-  /** The cohort of a treasurer; null for the branch head. */
-  yearAccountId: string | null;
+  /** The cohort/year this officer is appointed to care for. */
+  yearAccountId: string;
   activeFrom: string;
   activeTo: string | null;
 };

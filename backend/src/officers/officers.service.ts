@@ -140,7 +140,7 @@ export class OfficersService {
       });
     } catch (error) {
       if (isUniqueViolation(error)) {
-        throw AppException.conflict('That office is already held by someone');
+        throw AppException.conflict('ตำแหน่งนี้ของชั้นปีที่เลือกมีผู้รับผิดชอบอยู่แล้ว');
       }
       throw error;
     }

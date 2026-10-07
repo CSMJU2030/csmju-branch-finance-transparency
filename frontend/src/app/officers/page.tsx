@@ -46,6 +46,9 @@ export default async function OfficersPage({
   const students = await listAssignableStudents({ q, page, entryYear: selectedEntryYear });
   if (isUnauthorized(students)) return <ReSignIn />;
   const yearNames = Object.fromEntries((years.ok ? years.data : []).map((year) => [year.id, `ชั้นปีที่ ${year.yearLevel}`]));
+  const studentByCoreUserId = new Map(
+    students.ok ? students.data.items.filter((student) => student.coreUserId).map((student) => [student.coreUserId!, student]) : [],
+  );
   // Entry year is only the Core Hub student-directory filter. A treasurer is
   // appointed to the active cohort/account, so do not couple the two values.
   const assignableYearAccounts = years.ok ? years.data : [];
@@ -121,8 +124,8 @@ export default async function OfficersPage({
               หากค้นไม่พบรายชื่อที่ผูกบัญชี Core Hub สามารถระบุบัญชีและรหัสนักศึกษาเองได้
             </p>
             <label className="flex flex-col gap-1 text-label-md">
-              รหัสบัญชี Core Hub (core_user_id)
-              <input name="coreUserId" required maxLength={64} pattern="\S+" className={inputClass} />
+              บัญชี Core Hub
+              <input name="coreUserId" required maxLength={64} pattern="\S+" className={inputClass} placeholder="กรอก Core User ID" />
             </label>
             <label className="flex flex-col gap-1 text-label-md">
               รหัสนักศึกษา
@@ -146,7 +149,7 @@ export default async function OfficersPage({
               <tr>
                 <th className={thClass}>ตำแหน่ง</th>
                 <th className={thClass}>ชั้นปี</th>
-                <th className={thClass}>บัญชี</th>
+                <th className={thClass}>ชื่อผู้ได้รับแต่งตั้ง</th>
                 <th className={thClass}>รหัสนักศึกษา</th>
                 <th className={thClass}>ตั้งแต่</th>
                 <th className={thClass} />
@@ -156,9 +159,8 @@ export default async function OfficersPage({
               {assignments.data.map((assignment) => (
                 <tr key={assignment.id}>
                   <td className={tdClass}>{OFFICER_LABEL[assignment.officerRole]}</td>
-                  <td className={tdClass}>{assignment.yearAccountId ? (yearNames[assignment.yearAccountId] ?? "—") : "ทั้งสาขา"}</td>
-                  <td className={`${tdClass} font-mono text-caption`}>{assignment.coreUserId}</td>
                   <td className={tdClass}>{assignment.personCode ?? "—"}</td>
+                  <td className={tdClass}>{studentByCoreUserId.get(assignment.coreUserId)?.fullNameTh ?? "—"}</td>
                   <td className={`${tdClass} whitespace-nowrap`}>{formatDateTime(assignment.activeFrom)}</td>
                   <td className={tdClass}>
                     {/* branch heads can release treasurers only; backend permissions are authoritative */}
