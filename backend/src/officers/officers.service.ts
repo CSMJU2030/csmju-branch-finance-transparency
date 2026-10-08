@@ -40,7 +40,7 @@ export class OfficersService {
     };
   }
 
-  async list(user: CoreHubIdentity, query: QueryOfficersDto) {
+  async list(user: CoreHubIdentity, query: QueryOfficersDto, token: string) {
     await this.assertMayManage(user, undefined);
 
     const where: Prisma.OfficerAssignmentWhereInput = {
@@ -58,7 +58,27 @@ export class OfficersService {
       }),
       this.prisma.officerAssignment.count({ where }),
     ]);
-    return { items, total };
+    const assignmentIds = items.map((assignment) => assignment.id);
+    const grantAudits = assignmentIds.length === 0 ? [] : await this.prisma.auditLog.findMany({
+      where: { targetType: 'OfficerAssignment', targetId: { in: assignmentIds }, action: 'OFFICER_GRANTED' },
+      select: { targetId: true, actorPersonCode: true },
+    });
+    const grantedByCodes = new Map(grantAudits.map((audit) => [audit.targetId, audit.actorPersonCode]));
+    const actorCodes = [...new Set(grantAudits.map((audit) => audit.actorPersonCode).filter((code): code is string => Boolean(code)))];
+    const actorNames = new Map<string, string>();
+    await Promise.all(actorCodes.map(async (code) => {
+      const person = await this.people.findPersonByPersonCode(token, code);
+      if (person?.fullNameTh) actorNames.set(code, person.fullNameTh);
+    }));
+    const enriched = items.map((assignment) => {
+      const code = grantedByCodes.get(assignment.id) ?? null;
+      return {
+        ...assignment,
+        grantedByFullNameTh: code ? actorNames.get(code) ?? null : null,
+        grantedByPersonCode: code,
+      };
+    });
+    return { items: enriched, total };
   }
 
   /** Read current branch students live from Core Hub; names are never persisted or cached. */

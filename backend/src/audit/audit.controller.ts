@@ -5,6 +5,7 @@ import { CollectionResult } from '../common/api-response';
 import { buildPaginationMeta } from '../common/dto/pagination.dto';
 import { CoreHubIdentity } from '../auth/core-hub-identity';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { CoreHubAccessToken } from '../auth/decorators/core-hub-access-token.decorator';
 import { OfficerScopeService } from '../officers/officer-scope.service';
 import { AuditService } from './audit.service';
 import { ListAuditLogsQueryDto } from './dto/list-audit-logs-query.dto';
@@ -19,9 +20,9 @@ export class AuditController {
 
   @Get('audit-logs')
   @RequirePermissions(Permission.AUDIT_READ)
-  async list(@CurrentUser() user: CoreHubIdentity, @Query() query: ListAuditLogsQueryDto) {
+  async list(@CurrentUser() user: CoreHubIdentity, @Query() query: ListAuditLogsQueryDto, @CoreHubAccessToken() token: string) {
     await this.scope.assertMayReadAudit(user);
-    const { items, total } = await this.audit.list(query);
+    const { items, total } = await this.audit.list(query, token);
     return new CollectionResult(items, buildPaginationMeta(total, query.page ?? 1, query.take));
   }
 
@@ -29,9 +30,10 @@ export class AuditController {
   @RequirePermissions(Permission.AUDIT_READ)
   async forTransaction(
     @CurrentUser() user: CoreHubIdentity,
+    @CoreHubAccessToken() token: string,
     @Param('transactionId', ParseUUIDPipe) transactionId: string,
   ) {
     await this.scope.assertMayReadAudit(user);
-    return this.audit.listForTarget('Transaction', transactionId);
+    return this.audit.listForTarget('Transaction', transactionId, token);
   }
 }

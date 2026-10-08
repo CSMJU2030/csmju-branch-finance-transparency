@@ -15,6 +15,13 @@ export type CoreHubStudentPage = {
   meta: { total: number; page: number; limit: number; totalPages: number };
 };
 
+export type CoreHubPerson = {
+  personCode: string | null;
+  fullNameTh: string;
+  fullNameEn: string | null;
+  coreUserId: string | null;
+};
+
 /**
  * Personal data is always fetched on demand with the requesting user's token.
  * Never cache or persist names, email, or directory results.
@@ -54,6 +61,26 @@ export class PeopleService {
    * (the student's first-admission academic year). This deliberately does not
    * require department scope.
    */
+  async findPersonByPersonCode(token: string, personCode: string): Promise<CoreHubPerson | null> {
+    let body: unknown;
+    try {
+      body = await getFromCoreHub(`${this.baseUrl}/api/v1/people/${encodeURIComponent(personCode)}`, token, this.requestTimeoutMs);
+    } catch (error) {
+      throw coreHubFailure(error);
+    }
+    const response = body as { success?: unknown; data?: unknown } | null;
+    if (response?.success !== true || !response.data || typeof response.data !== 'object') {
+      return null;
+    }
+    const person = response.data as Record<string, unknown>;
+    if (typeof person.fullNameTh !== 'string') return null;
+    return {
+      personCode: typeof person.personCode === 'string' ? person.personCode : personCode,
+      fullNameTh: person.fullNameTh,
+      fullNameEn: typeof person.fullNameEn === 'string' ? person.fullNameEn : null,
+      coreUserId: typeof person.coreUserId === 'string' ? person.coreUserId : null,
+    };
+  }
   async listActiveStudents(token: string, query: { q?: string; page?: number; entryYear?: number }): Promise<CoreHubStudentPage> {
     const page = Number.isInteger(query.page) && (query.page ?? 0) > 0 ? query.page! : 1;
     const url = new URL(`${this.baseUrl}/api/v1/people`);

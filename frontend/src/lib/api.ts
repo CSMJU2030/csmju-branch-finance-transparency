@@ -121,6 +121,7 @@ export type AuditLog = {
   id: string;
   actorCoreUserId: string | null;
   actorPersonCode: string | null;
+  actorFullNameTh: string | null;
   action: string;
   targetType: string;
   targetId: string;
@@ -144,6 +145,9 @@ export type OfficerAssignment = {
   yearAccountId: string;
   activeFrom: string;
   activeTo: string | null;
+  grantedByCoreUserId: string | null;
+  grantedByFullNameTh: string | null;
+  grantedByPersonCode: string | null;
 };
 
 export type Offices = {

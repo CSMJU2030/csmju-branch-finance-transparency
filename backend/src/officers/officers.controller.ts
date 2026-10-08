@@ -46,8 +46,8 @@ export class OfficersController {
 
   @Get()
   @RequirePermissions(Permission.OFFICER_READ_ANY)
-  async list(@CurrentUser() user: CoreHubIdentity, @Query() query: QueryOfficersDto) {
-    const { items, total } = await this.officers.list(user, query);
+  async list(@CurrentUser() user: CoreHubIdentity, @Query() query: QueryOfficersDto, @CoreHubAccessToken() token: string) {
+    const { items, total } = await this.officers.list(user, query, token);
     return new CollectionResult(items, buildPaginationMeta(total, query.page ?? 1, query.take));
   }
 

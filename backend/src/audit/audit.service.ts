@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma, PrismaClient } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ListAuditLogsQueryDto } from './dto/list-audit-logs-query.dto';
+import { PeopleService } from '../core-hub/people.service';
 
 export interface AuditEntry {
   /** Core Hub `sub` of whoever acted; null only for a system-originated event. */
@@ -23,7 +24,7 @@ const AUDIT_LOG_INCLUDE = {
 
 @Injectable()
 export class AuditService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly people: PeopleService) {}
 
   /**
    * Writes an audit row. Pass the surrounding Prisma transaction client so the
@@ -47,7 +48,7 @@ export class AuditService {
     });
   }
 
-  async list(query: ListAuditLogsQueryDto) {
+  async list(query: ListAuditLogsQueryDto, token: string) {
     const where: Prisma.AuditLogWhereInput = {
       action: query.action,
       targetType: query.targetType,
@@ -82,15 +83,32 @@ export class AuditService {
       }),
       this.prisma.auditLog.count({ where }),
     ]);
-    return { items, total };
+    const actorCodes = [...new Set(items.map((item) => item.actorPersonCode).filter((code): code is string => Boolean(code)))];
+    const actorNames = new Map<string, string>();
+    await Promise.all(actorCodes.map(async (code) => {
+      const person = await this.people.findPersonByPersonCode(token, code);
+      if (person?.fullNameTh) actorNames.set(code, person.fullNameTh);
+    }));
+    const enriched = items.map((item) => ({
+      ...item,
+      actorFullNameTh: item.actorPersonCode ? actorNames.get(item.actorPersonCode) ?? null : null,
+    }));
+    return { items: enriched, total };
   }
 
   /** The decision trail of one record, oldest first: read as a narrative, not a feed. */
-  listForTarget(targetType: string, targetId: string) {
-    return this.prisma.auditLog.findMany({
+  async listForTarget(targetType: string, targetId: string, token: string) {
+    const items = await this.prisma.auditLog.findMany({
       where: { targetType, targetId },
       include: AUDIT_LOG_INCLUDE,
       orderBy: { createdAt: 'asc' },
     });
+    const actorCodes = [...new Set(items.map((item) => item.actorPersonCode).filter((code): code is string => Boolean(code)))];
+    const actorNames = new Map<string, string>();
+    await Promise.all(actorCodes.map(async (code) => {
+      const person = await this.people.findPersonByPersonCode(token, code);
+      if (person?.fullNameTh) actorNames.set(code, person.fullNameTh);
+    }));
+    return items.map((item) => ({ ...item, actorFullNameTh: item.actorPersonCode ? actorNames.get(item.actorPersonCode) ?? null : null }));
   }
 }

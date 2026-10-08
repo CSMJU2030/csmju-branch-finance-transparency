@@ -130,6 +130,7 @@ export default async function OfficersPage({
                 <th className={thClass}>ชั้นปี</th>
                 <th className={thClass}>ชื่อผู้ได้รับแต่งตั้ง</th>
                 <th className={thClass}>รหัสนักศึกษา</th>
+                <th className={thClass}>ผู้แต่งตั้ง</th>
                 <th className={thClass}>ตั้งแต่</th>
                 <th className={thClass} />
               </tr>
@@ -141,6 +142,7 @@ export default async function OfficersPage({
                   <td className={tdClass}>{assignableYearAccounts.find((year) => year.id === assignment.yearAccountId)?.yearLevel ? `ชั้นปีที่ ${assignableYearAccounts.find((year) => year.id === assignment.yearAccountId)?.yearLevel}` : "—"}</td>
                   <td className={tdClass}>{studentByCoreUserId.get(assignment.coreUserId)?.fullNameTh ?? "—"}</td>
                   <td className={`${tdClass} whitespace-nowrap`}>{assignment.personCode ?? "—"}</td>
+                  <td className={tdClass}>{assignment.grantedByFullNameTh ?? assignment.grantedByPersonCode ?? "—"}</td>
                   <td className={`${tdClass} whitespace-nowrap`}>{formatDateTime(assignment.activeFrom)}</td>
                   <td className={tdClass}>
                     {/* branch heads can release treasurers only; backend permissions are authoritative */}

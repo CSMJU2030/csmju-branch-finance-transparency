@@ -88,7 +88,7 @@ export default async function AuditLogsPage({ searchParams }: { searchParams: Pr
                   <tr key={log.id}>
                     <td className={`${tdClass} whitespace-nowrap`}>{formatDateTime(log.createdAt)}</td>
                     <td className={tdClass}>{AUDIT_ACTION_LABEL[log.action] ?? log.action}</td>
-                    <td className={tdClass}>{log.actorPersonCode ?? "ระบบ"}</td>
+                    <td className={tdClass}>{log.actorFullNameTh ? `${log.actorFullNameTh}${log.actorPersonCode ? ` (${log.actorPersonCode})` : ""}` : log.actorPersonCode ?? "ระบบ"}</td>
                     <td className={tdClass}>{log.yearAccount ? `ชั้นปีที่ ${log.yearAccount.yearLevel}` : "—"}</td>
                     <td className={tdClass}>{log.metadataJson?.reason ?? ""}</td>
                   </tr>
