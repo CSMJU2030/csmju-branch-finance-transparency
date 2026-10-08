@@ -124,7 +124,6 @@ export class ApprovalsService {
   }
 
   private async transition(t: Transition): Promise<Transaction> {
-    await this.scope.assertMayDecide(t.user);
     const personCode = await this.people.myPersonCode(t.token);
 
     return this.prisma.$transaction(async (tx) => {
