@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { PageHeader, cardClass, dangerButtonClass, inputClass, primaryButtonClass, tdClass, thClass } from "@/csmju";
+import { PageHeader, cardClass, dangerButtonClass, primaryButtonClass, tdClass, thClass } from "@/csmju";
 import Flash from "@/components/Flash";
 import ReSignIn from "@/components/ReSignIn";
 import { isUnauthorized, listAssignableStudents, listAssignableYearAccounts, listOfficers } from "@/lib/api";
@@ -97,22 +97,16 @@ export default async function OfficersPage({
         {students.ok && (
           <StudentPicker students={students.data.items} entryYear={selectedEntryYear} initialQuery={q} />
         )}
-        {(!students.ok || !students.data.items.some((student) => student.coreUserId)) && (
-          <>
-            <p className="text-body-sm text-on-surface-variant lg:col-span-2">
-              หากค้นไม่พบรายชื่อที่ผูกบัญชี Core Hub สามารถระบุบัญชีและรหัสนักศึกษาเองได้
-            </p>
-            <label className="flex flex-col gap-1 text-label-md">
-              บัญชี Core Hub
-              <input name="coreUserId" required maxLength={64} pattern="\S+" className={inputClass} placeholder="กรอก Core User ID" />
-            </label>
-            <label className="flex flex-col gap-1 text-label-md">
-              รหัสนักศึกษา
-              <input name="personCode" maxLength={50} pattern="[A-Za-z0-9-]+" className={inputClass} />
-            </label>
-          </>
+        {students.ok && students.data.items.some((student) => student.coreUserId === null) && (
+          <p className="text-body-sm text-error lg:col-span-2">
+            รายชื่อบางรายการยังไม่ผูกบัญชี Core Hub จึงไม่สามารถแต่งตั้งจากรายการนั้นได้ กรุณาให้ Core Hub แก้ไขข้อมูลก่อน
+          </p>
         )}
-        <button type="submit" className={`${primaryButtonClass} w-fit lg:col-span-2`}>
+        <button
+          type="submit"
+          disabled={!students.ok || !students.data.items.some((student) => student.coreUserId !== null)}
+          className={`${primaryButtonClass} w-fit lg:col-span-2 disabled:cursor-not-allowed disabled:opacity-50`}
+        >
           แต่งตั้ง
         </button>
       </form>
