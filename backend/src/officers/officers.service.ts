@@ -64,18 +64,21 @@ export class OfficersService {
       select: { targetId: true, actorPersonCode: true },
     });
     const grantedByCodes = new Map(grantAudits.map((audit) => [audit.targetId, audit.actorPersonCode]));
-    const actorCodes = [...new Set(grantAudits.map((audit) => audit.actorPersonCode).filter((code): code is string => Boolean(code)))];
-    const actorNames = new Map<string, string>();
-    await Promise.all(actorCodes.map(async (code) => {
+    const personCodes = [...new Set(items.map((assignment) => assignment.personCode).filter((code): code is string => Boolean(code)))];
+    const appointorCodes = [...new Set(grantAudits.map((audit) => audit.actorPersonCode).filter((code): code is string => Boolean(code)))];
+    const allCodes = [...new Set([...personCodes, ...appointorCodes])];
+    const personNames = new Map<string, string>();
+    await Promise.all(allCodes.map(async (code) => {
       const person = await this.people.findPersonByPersonCode(token, code);
-      if (person?.fullNameTh) actorNames.set(code, person.fullNameTh);
+      if (person?.fullNameTh) personNames.set(code, person.fullNameTh);
     }));
     const enriched = items.map((assignment) => {
-      const code = grantedByCodes.get(assignment.id) ?? null;
+      const appointorCode = grantedByCodes.get(assignment.id) ?? null;
       return {
         ...assignment,
-        grantedByFullNameTh: code ? actorNames.get(code) ?? null : null,
-        grantedByPersonCode: code,
+        fullNameTh: assignment.personCode ? personNames.get(assignment.personCode) ?? null : null,
+        grantedByFullNameTh: appointorCode ? personNames.get(appointorCode) ?? null : null,
+        grantedByPersonCode: appointorCode,
       };
     });
     return { items: enriched, total };

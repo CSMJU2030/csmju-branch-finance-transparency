@@ -122,6 +122,8 @@ export type AuditLog = {
   actorCoreUserId: string | null;
   actorPersonCode: string | null;
   actorFullNameTh: string | null;
+  targetPersonCode: string | null;
+  targetFullNameTh: string | null;
   action: string;
   targetType: string;
   targetId: string;
@@ -140,6 +142,7 @@ export type OfficerAssignment = {
   id: string;
   coreUserId: string;
   personCode: string | null;
+  fullNameTh: string | null;
   officerRole: OfficerRole;
   /** The cohort/year this officer is appointed to care for. */
   yearAccountId: string;

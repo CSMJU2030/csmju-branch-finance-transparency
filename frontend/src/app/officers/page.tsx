@@ -45,9 +45,6 @@ export default async function OfficersPage({
     : SUPPORTED_ENTRY_YEARS[0];
   const students = await listAssignableStudents({ q, page, entryYear: selectedEntryYear });
   if (isUnauthorized(students)) return <ReSignIn />;
-  const studentByCoreUserId = new Map(
-    students.ok ? students.data.items.filter((student) => student.coreUserId).map((student) => [student.coreUserId!, student]) : [],
-  );
   // Entry year is only the Core Hub student-directory filter. A treasurer is
   // appointed to the active cohort/account, so do not couple the two values.
   const assignableYearAccounts = years.ok ? years.data : [];
@@ -134,7 +131,7 @@ export default async function OfficersPage({
                 <tr key={assignment.id}>
                   <td className={tdClass}>{OFFICER_LABEL[assignment.officerRole]}</td>
                   <td className={tdClass}>{assignableYearAccounts.find((year) => year.id === assignment.yearAccountId)?.yearLevel ? `ชั้นปีที่ ${assignableYearAccounts.find((year) => year.id === assignment.yearAccountId)?.yearLevel}` : "—"}</td>
-                  <td className={tdClass}>{studentByCoreUserId.get(assignment.coreUserId)?.fullNameTh ?? "—"}</td>
+                  <td className={tdClass}>{assignment.fullNameTh ?? assignment.personCode ?? "—"}</td>
                   <td className={`${tdClass} whitespace-nowrap`}>{assignment.personCode ?? "—"}</td>
                   <td className={tdClass}>{assignment.grantedByFullNameTh ?? assignment.grantedByPersonCode ?? "—"}</td>
                   <td className={`${tdClass} whitespace-nowrap`}>{formatDateTime(assignment.activeFrom)}</td>
