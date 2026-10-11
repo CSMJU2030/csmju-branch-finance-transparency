@@ -89,10 +89,41 @@ export class AuditService {
       const person = await this.people.findPersonByPersonCode(token, code);
       if (person?.fullNameTh) actorNames.set(code, person.fullNameTh);
     }));
-    const enriched = items.map((item) => ({
-      ...item,
-      actorFullNameTh: item.actorPersonCode ? actorNames.get(item.actorPersonCode) ?? null : null,
+    const officerTargetIds = items.filter((item) => item.targetType === 'OfficerAssignment').map((item) => item.targetId);
+    const transactionTargetIds = items.filter((item) => item.targetType === 'Transaction').map((item) => item.targetId);
+    const [officerTargets, transactionTargets] = await Promise.all([
+      officerTargetIds.length === 0
+        ? []
+        : this.prisma.officerAssignment.findMany({
+            where: { id: { in: officerTargetIds } },
+            select: { id: true, personCode: true },
+          }),
+      transactionTargetIds.length === 0
+        ? []
+        : this.prisma.transaction.findMany({
+            where: { id: { in: transactionTargetIds } },
+            select: { id: true, createdByPersonCode: true },
+          }),
+    ]);
+    const targetCodesById = new Map<string, string | null>([
+      ...officerTargets.map((target) => [target.id, target.personCode] as const),
+      ...transactionTargets.map((target) => [target.id, target.createdByPersonCode] as const),
+    ]);
+    const targetCodes = [...new Set([...targetCodesById.values()].filter((code): code is string => Boolean(code)))];
+    const targetNames = new Map<string, string>();
+    await Promise.all(targetCodes.map(async (code) => {
+      const person = await this.people.findPersonByPersonCode(token, code);
+      if (person?.fullNameTh) targetNames.set(code, person.fullNameTh);
     }));
+    const enriched = items.map((item) => {
+      const targetPersonCode = targetCodesById.get(item.targetId) ?? null;
+      return {
+        ...item,
+        actorFullNameTh: item.actorPersonCode ? actorNames.get(item.actorPersonCode) ?? null : null,
+        targetPersonCode,
+        targetFullNameTh: targetPersonCode ? targetNames.get(targetPersonCode) ?? null : null,
+      };
+    });
     return { items: enriched, total };
   }
 
