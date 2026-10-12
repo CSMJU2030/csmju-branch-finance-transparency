@@ -79,7 +79,6 @@ export default async function AuditLogsPage({ searchParams }: { searchParams: Pr
                   <th className={thClass}>เวลา</th>
                   <th className={thClass}>การกระทำ</th>
                   <th className={thClass}>โดย</th>
-                  <th className={thClass}>ผู้ถูกกระทำ</th>
                   <th className={thClass}>ชั้นปี</th>
                   <th className={thClass}>หมายเหตุ</th>
                 </tr>
@@ -90,7 +89,6 @@ export default async function AuditLogsPage({ searchParams }: { searchParams: Pr
                     <td className={`${tdClass} whitespace-nowrap`}>{formatDateTime(log.createdAt)}</td>
                     <td className={tdClass}>{AUDIT_ACTION_LABEL[log.action] ?? log.action}</td>
                     <td className={tdClass}>{log.actorFullNameTh ? `${log.actorFullNameTh}${log.actorPersonCode ? ` (${log.actorPersonCode})` : ""}` : log.actorPersonCode ?? "ระบบ"}</td>
-                    <td className={tdClass}>{log.targetFullNameTh ? `${log.targetFullNameTh}${log.targetPersonCode ? ` (${log.targetPersonCode})` : ""}` : log.targetPersonCode ?? "—"}</td>
                     <td className={tdClass}>{log.yearAccount ? `ชั้นปีที่ ${log.yearAccount.yearLevel}` : "—"}</td>
                     <td className={tdClass}>{log.metadataJson?.reason ?? ""}</td>
                   </tr>
